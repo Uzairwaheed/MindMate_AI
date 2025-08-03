@@ -10,7 +10,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { login } = useAuthStore();
+  const { login, loginWithGoogle, loginWithFacebook } = useAuthStore();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -23,14 +23,25 @@ export default function LoginScreen() {
       await login(email, password);
       router.replace('/(tabs)');
     } catch (error) {
-      Alert.alert('Login Failed', 'Invalid credentials. Please try again.');
+      Alert.alert('Login Failed', error instanceof Error ? error.message : 'Invalid credentials. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSocialLogin = (provider: string) => {
-    Alert.alert('Coming Soon', `${provider} login will be available soon!`);
+  const handleSocialLogin = async (provider: 'google' | 'facebook') => {
+    try {
+      setLoading(true);
+      if (provider === 'google') {
+        await loginWithGoogle();
+      } else {
+        await loginWithFacebook();
+      }
+      // Navigation will be handled by auth state listener
+    } catch (error) {
+      Alert.alert('Login Failed', `Failed to login with ${provider}. Please try again.`);
+      setLoading(false);
+    }
   };
 
   return (
@@ -102,14 +113,16 @@ export default function LoginScreen() {
 
           <TouchableOpacity
             style={styles.socialButton}
-            onPress={() => handleSocialLogin('Google')}
+            onPress={() => handleSocialLogin('google')}
+            disabled={loading}
           >
             <Text style={styles.socialButtonText}>Continue with Google</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.socialButton}
-            onPress={() => handleSocialLogin('Facebook')}
+            onPress={() => handleSocialLogin('facebook')}
+            disabled={loading}
           >
             <Text style={styles.socialButtonText}>Continue with Facebook</Text>
           </TouchableOpacity>

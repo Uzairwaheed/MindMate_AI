@@ -4,11 +4,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { ChevronLeft, Camera, Upload, Smile, Frown, Meh } from 'lucide-react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { moodService } from '@/services/moodService';
 
 export default function SentimentAnalysisScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [showCamera, setShowCamera] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
 
   const requestCameraPermission = async () => {
     if (!permission?.granted) {
@@ -22,11 +24,30 @@ export default function SentimentAnalysisScreen() {
   };
 
   const analyzeImage = () => {
-    // Simulate sentiment analysis
-    const moods = ['Happy', 'Neutral', 'Sad', 'Anxious', 'Calm'];
-    const randomMood = moods[Math.floor(Math.random() * moods.length)];
-    setAnalysisResult(randomMood);
-    setShowCamera(false);
+    setAnalyzing(true);
+    
+    // Simulate image capture and analysis
+    setTimeout(async () => {
+      try {
+        // In a real implementation, you would capture the image here
+        const mockImageBase64 = 'mock_image_data';
+        const analysis = await moodService.analyzeImageSentiment(mockImageBase64);
+        
+        // Save the analysis to database
+        await moodService.createSentimentAnalysis({
+          detectedEmotion: analysis.emotion,
+          confidenceScore: analysis.confidence,
+          analysisResult: analysis.details,
+        });
+        
+        setAnalysisResult(analysis.emotion);
+        setShowCamera(false);
+      } catch (error) {
+        Alert.alert('Analysis Failed', 'Failed to analyze image. Please try again.');
+      } finally {
+        setAnalyzing(false);
+      }
+    }, 2000);
   };
 
   const getMoodIcon = (mood: string) => {
@@ -67,13 +88,17 @@ export default function SentimentAnalysisScreen() {
               <ChevronLeft size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <Text style={styles.cameraInstructions}>
-              Position your face in the frame and tap to analyze
+              {analyzing ? 'Analyzing your expression...' : 'Position your face in the frame and tap to analyze'}
             </Text>
             <TouchableOpacity
               style={styles.captureButton}
               onPress={analyzeImage}
+              disabled={analyzing}
             >
-              <View style={styles.captureButtonInner} />
+              <View style={[
+                styles.captureButtonInner,
+                analyzing && styles.captureButtonAnalyzing
+              ]} />
             </TouchableOpacity>
           </View>
         </CameraView>
@@ -357,5 +382,8 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     backgroundColor: '#FFFFFF',
+  },
+  captureButtonAnalyzing: {
+    backgroundColor: '#8B5CF6',
   },
 });

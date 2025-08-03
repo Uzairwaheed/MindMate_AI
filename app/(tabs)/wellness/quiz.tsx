@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'rea
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { ChevronLeft, CircleCheck as CheckCircle } from 'lucide-react-native';
+import { wellnessService } from '@/services/wellnessService';
 
 const quizQuestions = [
   {
@@ -36,6 +37,7 @@ export default function QuizScreen() {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<number[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleAnswer = (optionIndex: number) => {
     const newAnswers = [...answers];
@@ -45,10 +47,32 @@ export default function QuizScreen() {
     if (currentQuestion < quizQuestions.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
     } else {
-      setShowResults(true);
+      submitQuiz(newAnswers);
     }
   };
 
+  const submitQuiz = async (finalAnswers: number[]) => {
+    setSubmitting(true);
+    try {
+      const totalScore = finalAnswers.reduce((sum, score) => sum + score, 0);
+      
+      await wellnessService.submitQuizResults({
+        quizType: 'Mental Health Assessment',
+        answers: finalAnswers.map((score, index) => ({
+          question: quizQuestions[index].question,
+          selectedOption: quizQuestions[index].options[quizQuestions[index].scores.indexOf(score)],
+          score,
+        })),
+        totalScore,
+      });
+      
+      setShowResults(true);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to submit quiz results. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
   const calculateResults = () => {
     const totalScore = answers.reduce((sum, score) => sum + score, 0);
     
@@ -109,7 +133,7 @@ export default function QuizScreen() {
             {results.level !== 'Minimal' && (
               <TouchableOpacity 
                 style={[styles.therapyButton, { backgroundColor: results.color }]}
-                onPress={() => router.push('/wellness/therapy')}
+                onPress={() => router.push('/(tabs)/wellness/therapy')}
               >
                 <Text style={styles.therapyButtonText}>Get Support Resources</Text>
               </TouchableOpacity>
@@ -130,6 +154,18 @@ export default function QuizScreen() {
             </Text>
           </View>
         </ScrollView>
+      </LinearGradient>
+    );
+  }
+  if (submitting) {
+    return (
+      <LinearGradient
+        colors={['#E6F3FF', '#F3E8FF']}
+        style={styles.container}
+      >
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Analyzing your responses...</Text>
+        </View>
       </LinearGradient>
     );
   }
@@ -388,5 +424,15 @@ const styles = StyleSheet.create({
     color: '#92400E',
     lineHeight: 16,
     textAlign: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 18,
+    fontFamily: 'Inter-Medium',
+    color: '#8B5CF6',
   },
 });

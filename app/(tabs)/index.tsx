@@ -1,4 +1,5 @@
 import React from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -12,10 +13,37 @@ import {
   Brain,
   Moon
 } from 'lucide-react-native';
+import { useAuthStore } from '@/store/authStore';
+import { journalService } from '@/services/journalService';
+import { moodService } from '@/services/moodService';
 
 export default function DashboardScreen() {
-  const moodScore = 7.2;
-  const lastWeekTrend = '+0.8';
+  const { user, greeting } = useAuthStore();
+  const [moodData, setMoodData] = useState({
+    weeklyAverage: 0,
+    trend: 0,
+    totalEntries: 0,
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  const loadDashboardData = async () => {
+    try {
+      const analytics = await journalService.getMoodAnalytics();
+      setMoodData({
+        weeklyAverage: analytics.weeklyAverage,
+        trend: analytics.trend,
+        totalEntries: analytics.totalEntries,
+      });
+    } catch (error) {
+      console.error('Failed to load dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const features = [
     {
@@ -69,7 +97,7 @@ export default function DashboardScreen() {
     >
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.greeting}>Good morning!</Text>
+          <Text style={styles.greeting}>{greeting}, {user?.fullName?.split(' ')[0] || 'there'}!</Text>
           <Text style={styles.subtitle}>How are you feeling today?</Text>
         </View>
 
@@ -80,14 +108,25 @@ export default function DashboardScreen() {
           >
             <Text style={styles.moodTitle}>This Week's Mood</Text>
             <View style={styles.moodScoreContainer}>
-              <Text style={styles.moodScore}>{moodScore}/10</Text>
+              <Text style={styles.moodScore}>
+                {loading ? '...' : `${moodData.weeklyAverage}/10`}
+              </Text>
               <View style={styles.trendContainer}>
                 <TrendingUp size={16} color="#FFFFFF" />
-                <Text style={styles.trendText}>{lastWeekTrend}</Text>
+                <Text style={styles.trendText}>
+                  {loading ? '...' : `${moodData.trend >= 0 ? '+' : ''}${moodData.trend}`}
+                </Text>
               </View>
             </View>
             <Text style={styles.moodDescription}>
-              You're doing great! Keep up the positive momentum.
+              {loading 
+                ? 'Loading your mood data...' 
+                : moodData.weeklyAverage >= 7 
+                  ? "You're doing great! Keep up the positive momentum."
+                  : moodData.weeklyAverage >= 5
+                    ? "You're managing well. Consider some self-care activities."
+                    : "Take care of yourself. Consider reaching out for support."
+              }
             </Text>
           </LinearGradient>
         </View>

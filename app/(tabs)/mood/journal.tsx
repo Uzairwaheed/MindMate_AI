@@ -3,23 +3,40 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert 
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { ChevronLeft, Calendar, Save } from 'lucide-react-native';
+import { journalService } from '@/services/journalService';
 
 export default function JournalScreen() {
   const [journalEntry, setJournalEntry] = useState('');
+  const [title, setTitle] = useState('');
+  const [moodRating, setMoodRating] = useState<number | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [loading, setLoading] = useState(false);
 
-  const handleSaveEntry = () => {
+  const handleSaveEntry = async () => {
     if (!journalEntry.trim()) {
       Alert.alert('Empty Entry', 'Please write something in your journal entry.');
       return;
     }
 
-    // Here you would typically save to a database
-    Alert.alert(
-      'Entry Saved',
-      'Your journal entry has been saved successfully!',
-      [{ text: 'OK', onPress: () => router.back() }]
-    );
+    setLoading(true);
+    try {
+      await journalService.createEntry({
+        title: title.trim() || undefined,
+        content: journalEntry.trim(),
+        moodRating: moodRating || undefined,
+        entryDate: selectedDate.toISOString().split('T')[0],
+      });
+
+      Alert.alert(
+        'Entry Saved',
+        'Your journal entry has been saved successfully!',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save journal entry. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -52,6 +69,37 @@ export default function JournalScreen() {
         </View>
 
         <View style={styles.journalContainer}>
+          <TextInput
+            style={styles.titleInput}
+            placeholder="Entry title (optional)"
+            value={title}
+            onChangeText={setTitle}
+            placeholderTextColor="#9CA3AF"
+          />
+
+          <View style={styles.moodRatingContainer}>
+            <Text style={styles.moodRatingLabel}>How are you feeling? (1-5)</Text>
+            <View style={styles.moodButtons}>
+              {[1, 2, 3, 4, 5].map((rating) => (
+                <TouchableOpacity
+                  key={rating}
+                  style={[
+                    styles.moodButton,
+                    moodRating === rating && styles.moodButtonSelected
+                  ]}
+                  onPress={() => setMoodRating(rating)}
+                >
+                  <Text style={[
+                    styles.moodButtonText,
+                    moodRating === rating && styles.moodButtonTextSelected
+                  ]}>
+                    {rating}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
           <Text style={styles.promptText}>
             How are you feeling today? What's on your mind?
           </Text>
@@ -70,9 +118,15 @@ export default function JournalScreen() {
           </Text>
         </View>
 
-        <TouchableOpacity style={styles.saveButton} onPress={handleSaveEntry}>
+        <TouchableOpacity 
+          style={[styles.saveButton, loading && styles.saveButtonDisabled]} 
+          onPress={handleSaveEntry}
+          disabled={loading}
+        >
           <Save size={20} color="#FFFFFF" style={styles.saveIcon} />
-          <Text style={styles.saveButtonText}>Save Entry</Text>
+          <Text style={styles.saveButtonText}>
+            {loading ? 'Saving...' : 'Save Entry'}
+          </Text>
         </TouchableOpacity>
 
         <View style={styles.tipsContainer}>
@@ -152,6 +206,50 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  titleInput: {
+    fontSize: 18,
+    fontFamily: 'Inter-Medium',
+    color: '#1F2937',
+    marginBottom: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  moodRatingContainer: {
+    marginBottom: 20,
+  },
+  moodRatingLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  moodButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  moodButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+  },
+  moodButtonSelected: {
+    backgroundColor: '#8B5CF6',
+    borderColor: '#8B5CF6',
+  },
+  moodButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+  },
+  moodButtonTextSelected: {
+    color: '#FFFFFF',
+  },
   promptText: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
@@ -185,6 +283,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 6,
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
   },
   saveIcon: {
     marginRight: 8,
