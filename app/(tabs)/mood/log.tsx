@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, PanResponder } from 'react-native';
 import { router } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { moodService } from '@/services/moodService';
@@ -20,6 +20,19 @@ export default function MoodLogScreen() {
     'Music', 'Therapy'
   ];
 
+  const moodOptions = [
+    { emoji: '😢', label: 'Very Sad', value: 1 },
+    { emoji: '😟', label: 'Sad', value: 2 },
+    { emoji: '😕', label: 'Down', value: 3 },
+    { emoji: '😐', label: 'Neutral', value: 4 },
+    { emoji: '🙂', label: 'Okay', value: 5 },
+    { emoji: '😊', label: 'Good', value: 6 },
+    { emoji: '😄', label: 'Happy', value: 7 },
+    { emoji: '😁', label: 'Very Happy', value: 8 },
+    { emoji: '🤩', label: 'Excited', value: 9 },
+    { emoji: '😍', label: 'Excellent', value: 10 },
+  ];
+
   const toggleActivity = (activity: string) => {
     setSelectedActivities(prev => 
       prev.includes(activity)
@@ -33,6 +46,10 @@ export default function MoodLogScreen() {
     try {
       await moodService.createMoodEntry({
         moodScore: mood,
+        energyLevel: energy,
+        anxietyLevel: anxiety,
+        stressLevel: stress,
+        sleepQuality: sleep,
         emotions: selectedActivities,
         notes: notes.trim(),
       });
@@ -49,6 +66,25 @@ export default function MoodLogScreen() {
     }
   };
 
+  const createSliderPanResponder = (value: number, setValue: (value: number) => void) => {
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const { locationX } = evt.nativeEvent;
+        const sliderWidth = 280; // Approximate slider width
+        const newValue = Math.max(1, Math.min(10, Math.round((locationX / sliderWidth) * 10)));
+        setValue(newValue);
+      },
+      onPanResponderMove: (evt) => {
+        const { locationX } = evt.nativeEvent;
+        const sliderWidth = 280;
+        const newValue = Math.max(1, Math.min(10, Math.round((locationX / sliderWidth) * 10)));
+        setValue(newValue);
+      },
+    });
+  };
+
   const renderSlider = (
     label: string,
     value: number,
@@ -56,30 +92,81 @@ export default function MoodLogScreen() {
     emoji: string,
     lowLabel: string,
     highLabel: string
-  ) => (
-    <View style={styles.sliderSection}>
-      <View style={styles.sliderHeader}>
-        <Text style={styles.sliderLabel}>{label} {emoji}</Text>
+  ) => {
+    const panResponder = createSliderPanResponder(value, setValue);
+    
+    return (
+      <View style={styles.sliderSection}>
+        <View style={styles.sliderHeader}>
+          <Text style={styles.sliderLabel}>{label} {emoji}</Text>
+        </View>
+        <View style={styles.sliderContainer} {...panResponder.panHandlers}>
+          <View style={styles.slider}>
+            <View 
+              style={[
+                styles.sliderTrack,
+                { width: `${(value / 10) * 100}%` }
+              ]} 
+            />
+            <View
+              style={[
+                styles.sliderThumb,
+                { left: `${(value / 10) * 100 - 2}%` }
+              ]}
+            />
+          </View>
+          <View style={styles.sliderLabels}>
+            <Text style={styles.sliderLabelText}>😢 {lowLabel}</Text>
+            <Text style={styles.sliderValue}>{value}/10</Text>
+            <Text style={styles.sliderLabelText}>😊 {highLabel}</Text>
+          </View>
+        </View>
       </View>
-      <View style={styles.sliderContainer}>
-        <View style={styles.slider}>
+    );
+  };
+
+  const renderMoodSelector = () => (
+    <View style={styles.moodSection}>
+      <Text style={styles.moodLabel}>Mood 😊</Text>
+      <View style={styles.moodGrid}>
+        {moodOptions.map((option) => (
+          <TouchableOpacity
+            key={option.value}
+            style={[
+              styles.moodOption,
+              mood === option.value && styles.moodOptionSelected
+            ]}
+            onPress={() => setMood(option.value)}
+          >
+            <Text style={styles.moodEmoji}>{option.emoji}</Text>
+            <Text style={[
+              styles.moodOptionLabel,
+              mood === option.value && styles.moodOptionLabelSelected
+            ]}>
+              {option.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={styles.moodSliderContainer}>
+        <View style={styles.moodSlider} {...createSliderPanResponder(mood, setMood).panHandlers}>
           <View 
             style={[
-              styles.sliderTrack,
-              { width: `${(value / 10) * 100}%` }
+              styles.moodSliderTrack,
+              { width: `${(mood / 10) * 100}%` }
             ]} 
           />
-          <TouchableOpacity
+          <View
             style={[
-              styles.sliderThumb,
-              { left: `${(value / 10) * 100 - 2}%` }
+              styles.moodSliderThumb,
+              { left: `${(mood / 10) * 100 - 2}%` }
             ]}
           />
         </View>
-        <View style={styles.sliderLabels}>
-          <Text style={styles.sliderLabelText}>😢 {lowLabel}</Text>
-          <Text style={styles.sliderValue}>{value}/10</Text>
-          <Text style={styles.sliderLabelText}>😊 {highLabel}</Text>
+        <View style={styles.moodSliderLabels}>
+          <Text style={styles.moodSliderLabel}>😢 Very Low</Text>
+          <Text style={styles.moodSliderValue}>{mood}/10</Text>
+          <Text style={styles.moodSliderLabel}>😊 Excellent</Text>
         </View>
       </View>
     </View>
@@ -102,7 +189,7 @@ export default function MoodLogScreen() {
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.moodCard}>
-          {renderSlider('Mood', mood, setMood, '😊', 'Very Low', 'Excellent')}
+          {renderMoodSelector()}
           {renderSlider('Energy Level', energy, setEnergy, '⚡', 'Exhausted', 'Energetic')}
           {renderSlider('Anxiety Level', anxiety, setAnxiety, '😰', 'Calm', 'Very Anxious')}
           {renderSlider('Stress Level', stress, setStress, '😤', 'Relaxed', 'Very Stressed')}
@@ -213,6 +300,93 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 3,
+  },
+  moodSection: {
+    marginBottom: 24,
+  },
+  moodLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#1F2937',
+    marginBottom: 16,
+  },
+  moodGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  moodOption: {
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    minWidth: 60,
+  },
+  moodOptionSelected: {
+    backgroundColor: '#8B5CF615',
+    borderColor: '#8B5CF6',
+  },
+  moodEmoji: {
+    fontSize: 20,
+    marginBottom: 4,
+  },
+  moodOptionLabel: {
+    fontSize: 10,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  moodOptionLabelSelected: {
+    color: '#8B5CF6',
+    fontFamily: 'Inter-Medium',
+  },
+  moodSliderContainer: {
+    paddingHorizontal: 4,
+  },
+  moodSlider: {
+    height: 6,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+    position: 'relative',
+    marginBottom: 12,
+  },
+  moodSliderTrack: {
+    height: '100%',
+    backgroundColor: '#8B5CF6',
+    borderRadius: 3,
+  },
+  moodSliderThumb: {
+    position: 'absolute',
+    top: -6,
+    width: 18,
+    height: 18,
+    backgroundColor: '#8B5CF6',
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  moodSliderLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  moodSliderLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  moodSliderValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#8B5CF6',
   },
   sliderSection: {
     marginBottom: 24,

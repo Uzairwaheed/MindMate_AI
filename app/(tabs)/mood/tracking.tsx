@@ -7,7 +7,7 @@ import { moodService } from '@/services/moodService';
 export default function MoodTrackingScreen() {
   const [moodStats, setMoodStats] = useState({
     averageMood: 7.2,
-    trend: 'Stable',
+    trend: 0,
     totalEntries: 0,
   });
   const [chartData, setChartData] = useState<any[]>([]);
@@ -21,13 +21,15 @@ export default function MoodTrackingScreen() {
   const loadMoodData = async () => {
     try {
       const stats = await moodService.getMoodStatistics();
-      const trends = await moodService.getMoodTrends(7);
+      const entries = await moodService.getUserMoodEntries(7);
       
       setMoodStats({
         averageMood: stats.averageMood,
-        trend: stats.averageMood >= 7 ? 'Stable' : stats.averageMood >= 5 ? 'Improving' : 'Declining',
+        trend: stats.averageMood,
         totalEntries: stats.totalEntries,
       });
+      
+      setRecentEntries(entries.slice(0, 5));
       
       // Generate chart data for the last 7 days
       const chartPoints = [];
@@ -37,13 +39,13 @@ export default function MoodTrackingScreen() {
         date.setDate(date.getDate() - i);
         const dateStr = date.toISOString().split('T')[0];
         
-        const moodEntry = trends.find(t => t.date === dateStr);
+        const moodEntry = entries.find(e => e.entry_date === dateStr);
         chartPoints.push({
           date: date,
-          mood: moodEntry?.score || Math.random() * 3 + 6, // Fallback to random data
-          energy: Math.random() * 3 + 6,
-          calm: Math.random() * 3 + 6,
-          relaxed: Math.random() * 3 + 6,
+          mood: moodEntry ? moodEntry.mood_score * 2 : 5, // Convert 1-5 to 1-10 scale
+          energy: moodEntry ? Math.random() * 3 + 6 : 5, // Placeholder until we store these separately
+          calm: moodEntry ? Math.random() * 3 + 6 : 5,
+          relaxed: moodEntry ? Math.random() * 3 + 6 : 5,
         });
       }
       setChartData(chartPoints);
@@ -198,13 +200,15 @@ export default function MoodTrackingScreen() {
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
             <Text style={styles.statEmoji}>😊</Text>
-            <Text style={styles.statValue}>{moodStats.averageMood}/10</Text>
+            <Text style={styles.statValue}>{(moodStats.averageMood * 2).toFixed(1)}/10</Text>
             <Text style={styles.statLabel}>Average Mood</Text>
           </View>
           
           <View style={styles.statCard}>
             <TrendingUp size={24} color="#10B981" />
-            <Text style={styles.statValue}>{moodStats.trend}</Text>
+            <Text style={styles.statValue}>
+              {moodStats.trend >= 4 ? 'Stable' : moodStats.trend >= 3 ? 'Improving' : 'Declining'}
+            </Text>
             <Text style={styles.statLabel}>7-Day Trend</Text>
           </View>
         </View>
@@ -225,8 +229,15 @@ export default function MoodTrackingScreen() {
           {recentEntries.length > 0 ? (
             recentEntries.map((entry, index) => (
               <View key={entry.id} style={styles.recentEntry}>
-                <Text style={styles.recentEntryDate}>{entry.date}</Text>
-                <Text style={styles.recentEntryMood}>{entry.mood}</Text>
+                <Text style={styles.recentEntryDate}>
+                  {new Date(entry.entry_date).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric'
+                  })}
+                </Text>
+                <Text style={styles.recentEntryMood}>
+                  {entry.mood_score <= 2 ? '😢' : entry.mood_score <= 3 ? '😐' : '😊'}
+                </Text>
               </View>
             ))
           ) : (

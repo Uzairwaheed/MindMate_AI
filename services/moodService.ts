@@ -8,6 +8,10 @@ type SentimentAnalysisInsert = Database['public']['Tables']['sentiment_analyses'
 
 export interface CreateMoodEntryData {
   moodScore: number;
+  energyLevel?: number;
+  anxietyLevel?: number;
+  stressLevel?: number;
+  sleepQuality?: number;
   emotions?: string[];
   notes?: string;
   entryDate?: string;
@@ -34,14 +38,14 @@ class MoodService {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No authenticated user');
 
-      // Convert mood score from 1-10 scale to 1-5 scale for database
-      const dbMoodScore = Math.ceil(entryData.moodScore / 2);
+      // Ensure mood score is within valid range (1-5 for database)
+      const dbMoodScore = Math.max(1, Math.min(5, Math.ceil(entryData.moodScore / 2)));
 
       const insertData: MoodEntryInsert = {
         user_id: user.id,
         mood_score: dbMoodScore,
         emotions: entryData.emotions || [],
-        notes: entryData.notes || '',
+        notes: entryData.notes ? `Mood: ${entryData.moodScore}/10, Energy: ${entryData.energyLevel || 0}/10, Anxiety: ${entryData.anxietyLevel || 0}/10, Stress: ${entryData.stressLevel || 0}/10, Sleep: ${entryData.sleepQuality || 0}/10. ${entryData.notes}` : `Mood: ${entryData.moodScore}/10, Energy: ${entryData.energyLevel || 0}/10, Anxiety: ${entryData.anxietyLevel || 0}/10, Stress: ${entryData.stressLevel || 0}/10, Sleep: ${entryData.sleepQuality || 0}/10`,
         entry_date: entryData.entryDate || new Date().toISOString().split('T')[0],
       };
 
@@ -55,6 +59,31 @@ class MoodService {
       return data;
     } catch (error) {
       console.error('Create mood entry error:', error);
+      throw error;
+    }
+  }
+
+  // Get user's mood entries
+  async getUserMoodEntries(limit?: number): Promise<MoodEntry[]> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No authenticated user');
+
+      let query = supabase
+        .from('mood_entries')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('entry_date', { ascending: false });
+
+      if (limit) {
+        query = query.limit(limit);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Get mood entries error:', error);
       throw error;
     }
   }
