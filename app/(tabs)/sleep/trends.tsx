@@ -11,29 +11,39 @@ interface SleepInsightsData {
   sleepScore: number;
   trend: 'up' | 'down' | 'stable';
   qualityBreakdown: {
-    deep: number;
-    light: number;
-    awake: number;
+    good: number;
+    okay: number;
+    poor: number;
   };
   recentEntries: any[];
+  quickStats: {
+    bestSleepDay: string;
+    averageBedtime: string;
+    commonWakeMood: string;
+    consistencyScore: number;
+  };
 }
 
 export default function SleepInsightsScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState('Last Week');
-  const [selectedDate, setSelectedDate] = useState('Aug 6');
   const [showPeriodModal, setShowPeriodModal] = useState(false);
   const [insightsData, setInsightsData] = useState<SleepInsightsData>({
     chartData: [],
     averageDuration: 0,
     sleepScore: 0,
     trend: 'stable',
-    qualityBreakdown: { deep: 0, light: 0, awake: 0 },
+    qualityBreakdown: { good: 0, okay: 0, poor: 0 },
     recentEntries: [],
+    quickStats: {
+      bestSleepDay: '',
+      averageBedtime: '',
+      commonWakeMood: '',
+      consistencyScore: 0,
+    },
   });
   const [loading, setLoading] = useState(true);
 
   const periods = ['Last Week', 'Last Month', 'Last 3 Months'];
-  const dates = ['Aug 4', 'Aug 5', 'Aug 6'];
 
   useEffect(() => {
     loadSleepInsights();
@@ -66,8 +76,11 @@ export default function SleepInsightsScreen() {
       const trend = recentAvg > earlierAvg + 0.5 ? 'up' : 
                    recentAvg < earlierAvg - 0.5 ? 'down' : 'stable';
 
-      // Generate quality breakdown (estimated from available data)
-      const qualityBreakdown = generateQualityBreakdown(analytics.qualityAverage);
+      // Generate quality breakdown from user data
+      const qualityBreakdown = generateQualityBreakdown(recentEntries);
+
+      // Calculate quick stats from real data
+      const quickStats = await calculateQuickStats(recentEntries);
 
       setInsightsData({
         chartData,
@@ -76,6 +89,7 @@ export default function SleepInsightsScreen() {
         trend,
         qualityBreakdown,
         recentEntries,
+        quickStats,
       });
     } catch (error) {
       console.error('Failed to load sleep insights:', error);
@@ -84,27 +98,138 @@ export default function SleepInsightsScreen() {
     }
   };
 
-  const generateQualityBreakdown = (avgQuality: number) => {
-    // Estimate sleep stage percentages based on quality score
-    const baseDeep = 20; // Base deep sleep percentage
-    const baseLight = 65; // Base light sleep percentage
-    const baseAwake = 15; // Base awake percentage
+  const generateQualityBreakdown = (entries: any[]) => {
+    if (entries.length === 0) {
+      return { good: 0, okay: 0, poor: 0 };
+    }
 
-    // Adjust based on quality (higher quality = more deep sleep, less awake time)
-    const qualityFactor = (avgQuality - 5) / 5; // -1 to 1 range
-    
-    const deep = Math.max(15, Math.min(35, baseDeep + (qualityFactor * 10)));
-    const awake = Math.max(5, Math.min(25, baseAwake - (qualityFactor * 8)));
-    const light = 100 - deep - awake;
+    let good = 0, okay = 0, poor = 0;
 
+    entries.forEach(entry => {
+      const quality = entry.sleep_quality;
+      const duration = entry.sleep_duration;
+
+      // Calculate quality based on sleep quality rating and duration
+      if (quality >= 7 && duration >= 7 && duration <= 9) {
+        good++;
+      } else if (quality >= 5 || (duration >= 6 && duration <= 10)) {
+        okay++;
+      } else {
+        poor++;
+      }
+    });
+
+    const total = entries.length;
     return {
-      deep: Math.round(deep),
-      light: Math.round(light),
-      awake: Math.round(awake),
+      good: Math.round((good / total) * 100),
+      okay: Math.round((okay / total) * 100),
+      poor: Math.round((poor / total) * 100),
     };
   };
 
+  const calculateQuickStats = async (entries: any[]) => {
+    if (entries.length === 0) {
+      return {
+        bestSleepDay: 'No data',
+        averageBedtime: 'No data',
+        commonWakeMood: 'No data',
+        consistencyScore: 0,
+      };
+    }
+
+    // Find best sleep day (highest quality + good duration)
+    const bestEntry = entries.reduce((best, entry) => {
+      const score = entry.sleep_quality + (entry.sleep_duration >= 7 && entry.sleep_duration <= 9 ? 2 : 0);
+      const bestScore = best.sleep_quality + (best.sleep_duration >= 7 && best.sleep_duration <= 9 ? 2 : 0);
+      return score > bestScore ? entry : best;
+    });
+
+    const bestSleepDay = new Date(bestEntry.entry_date).toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric' 
+    });
+
+    // Calculate average bedtime
+    const bedtimes = entries.map(e => e.bedtime);
+    const avgBedtime = calculateAverageTime(bedtimes);
+
+    // Find most common wake mood
+    const moods = entries.map(e => e.mood_after_sleep);
+    const moodCounts = moods.reduce((acc, mood) => {
+      acc[mood] = (acc[mood] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    const commonWakeMood = Object.keys(moodCounts).reduce((a, b) => 
+      moodCounts[a] > moodCounts[b] ? a : b, 'Energized'
+    );
+
+    // Calculate consistency score
+    const consistencyScore = calculateConsistencyScore(entries);
+
+    return {
+      bestSleepDay,
+      averageBedtime: avgBedtime,
+      commonWakeMood,
+      consistencyScore,
+    };
+  };
+
+  const calculateAverageTime = (times: string[]): string => {
+    if (times.length === 0) return '00:00';
+    
+    const totalMinutes = times.reduce((sum, time) => {
+      const [hour, min] = time.split(':').map(Number);
+      return sum + (hour * 60 + min);
+    }, 0);
+    
+    const avgMinutes = totalMinutes / times.length;
+    const hours = Math.floor(avgMinutes / 60);
+    const minutes = Math.round(avgMinutes % 60);
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  };
+
+  const calculateConsistencyScore = (entries: any[]): number => {
+    if (entries.length < 2) return 0;
+
+    const bedtimes = entries.map(e => e.bedtime);
+    const waketimes = entries.map(e => e.wake_time);
+
+    // Calculate variance in bedtimes and wake times
+    const bedtimeVariance = calculateTimeVariance(bedtimes);
+    const waketimeVariance = calculateTimeVariance(waketimes);
+
+    // Lower variance = higher consistency
+    const avgVariance = (bedtimeVariance + waketimeVariance) / 2;
+    const consistencyScore = Math.max(0, 100 - (avgVariance * 10));
+
+    return Math.round(consistencyScore);
+  };
+
+  const calculateTimeVariance = (times: string[]): number => {
+    if (times.length < 2) return 0;
+
+    const minutes = times.map(time => {
+      const [hour, min] = time.split(':').map(Number);
+      return hour * 60 + min;
+    });
+
+    const avg = minutes.reduce((sum, min) => sum + min, 0) / minutes.length;
+    const variance = minutes.reduce((sum, min) => sum + Math.pow(min - avg, 2), 0) / minutes.length;
+    
+    return Math.sqrt(variance) / 60; // Convert to hours
+  };
+
   const renderSleepChart = () => {
+    if (insightsData.chartData.length === 0) {
+      return (
+        <View style={styles.noDataContainer}>
+          <Text style={styles.noDataText}>No sleep data available</Text>
+          <Text style={styles.noDataSubtext}>Start logging your sleep to see trends</Text>
+        </View>
+      );
+    }
+
     const maxDuration = Math.max(...insightsData.chartData.map(d => d.duration || 0), 10);
     const chartHeight = 120;
     
@@ -198,13 +323,19 @@ export default function SleepInsightsScreen() {
   };
 
   const renderQualityDonut = () => {
-    const { deep, light, awake } = insightsData.qualityBreakdown;
-    const total = deep + light + awake;
+    const { good, okay, poor } = insightsData.qualityBreakdown;
+    
+    if (good === 0 && okay === 0 && poor === 0) {
+      return (
+        <View style={styles.noDataContainer}>
+          <Text style={styles.noDataText}>No quality data available</Text>
+        </View>
+      );
+    }
     
     return (
       <View style={styles.donutContainer}>
         <View style={styles.donutChart}>
-          {/* Simplified donut representation */}
           <View style={styles.donutCenter}>
             <Text style={styles.donutCenterText}>Sleep</Text>
             <Text style={styles.donutCenterText}>Quality</Text>
@@ -214,18 +345,18 @@ export default function SleepInsightsScreen() {
         <View style={styles.donutLegend}>
           <View style={styles.legendRow}>
             <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
-            <Text style={styles.legendLabel}>Deep</Text>
-            <Text style={styles.legendValue}>{deep}%</Text>
+            <Text style={styles.legendLabel}>Good</Text>
+            <Text style={styles.legendValue}>{good}%</Text>
           </View>
           <View style={styles.legendRow}>
             <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
-            <Text style={styles.legendLabel}>Light</Text>
-            <Text style={styles.legendValue}>{light}%</Text>
+            <Text style={styles.legendLabel}>Okay</Text>
+            <Text style={styles.legendValue}>{okay}%</Text>
           </View>
           <View style={styles.legendRow}>
             <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
-            <Text style={styles.legendLabel}>Awake</Text>
-            <Text style={styles.legendValue}>{awake}%</Text>
+            <Text style={styles.legendLabel}>Poor</Text>
+            <Text style={styles.legendValue}>{poor}%</Text>
           </View>
         </View>
       </View>
@@ -233,11 +364,39 @@ export default function SleepInsightsScreen() {
   };
 
   const renderRecentEntries = () => {
+    if (insightsData.recentEntries.length === 0) {
+      return (
+        <View style={styles.noDataContainer}>
+          <Text style={styles.noDataText}>No recent sleep entries</Text>
+          <TouchableOpacity
+            style={styles.logSleepButton}
+            onPress={() => router.push('/sleep/log')}
+          >
+            <Text style={styles.logSleepButtonText}>Log Your Sleep</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     return (
       <View style={styles.recentEntriesContainer}>
         {insightsData.recentEntries.slice(0, 3).map((entry, index) => {
           const quality = entry.sleep_quality;
+          const duration = entry.sleep_duration;
+          
+          // Determine quality indicators
           const qualityColor = quality >= 7 ? '#10B981' : quality >= 5 ? '#F59E0B' : '#EF4444';
+          const qualityText = quality >= 7 ? 'good' : quality >= 5 ? 'okay' : 'poor';
+          
+          // Determine mood based on quality and duration
+          const mood = quality >= 7 && duration >= 7 ? 'energized' : 
+                      quality >= 5 ? 'rested' : 'tired';
+          
+          // Calculate sleep score for this entry
+          const entryScore = Math.round(
+            (quality / 10) * 60 + // 60% weight for quality
+            (Math.min(duration / 8, 1)) * 40 // 40% weight for duration
+          );
           
           return (
             <View key={entry.id} style={styles.entryRow}>
@@ -248,30 +407,61 @@ export default function SleepInsightsScreen() {
                 <Text style={styles.entryDateText}>
                   {new Date(entry.entry_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 </Text>
-              </View>
-              
-              <View style={styles.entryDuration}>
                 <Text style={styles.entryDurationText}>
-                  {sleepService.formatDuration(entry.sleep_duration)}
+                  {sleepService.formatDuration(duration)}
                 </Text>
               </View>
               
               <View style={styles.entryQuality}>
-                <View style={[styles.qualityDot, { backgroundColor: qualityColor }]} />
-                <View style={[styles.qualityDot, { backgroundColor: quality >= 6 ? qualityColor : '#374151' }]} />
-                <View style={[styles.qualityDot, { backgroundColor: quality >= 8 ? qualityColor : '#374151' }]} />
+                <View style={[styles.qualityBadge, { backgroundColor: qualityColor }]}>
+                  <Text style={styles.qualityBadgeText}>{qualityText}</Text>
+                </View>
+                <Text style={styles.moodText}>😊 {mood}</Text>
+                <View style={styles.scoreContainer}>
+                  <Text style={styles.scoreText}>⭐ {entryScore}/100</Text>
+                </View>
               </View>
               
               <View style={styles.entryPattern}>
                 <View style={styles.sleepBar}>
-                  <View style={[styles.sleepSegment, { backgroundColor: '#10B981', flex: 0.25 }]} />
-                  <View style={[styles.sleepSegment, { backgroundColor: '#F59E0B', flex: 0.6 }]} />
-                  <View style={[styles.sleepSegment, { backgroundColor: '#EF4444', flex: 0.15 }]} />
+                  <View style={[styles.sleepSegment, { backgroundColor: '#10B981', flex: quality >= 7 ? 0.6 : 0.3 }]} />
+                  <View style={[styles.sleepSegment, { backgroundColor: '#F59E0B', flex: quality >= 5 ? 0.3 : 0.4 }]} />
+                  <View style={[styles.sleepSegment, { backgroundColor: '#EF4444', flex: quality < 5 ? 0.3 : 0.1 }]} />
                 </View>
               </View>
             </View>
           );
         })}
+      </View>
+    );
+  };
+
+  const renderQuickStats = () => {
+    const { quickStats } = insightsData;
+    
+    return (
+      <View style={styles.quickStatsContainer}>
+        <View style={styles.statsGrid}>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Best Sleep Day</Text>
+            <Text style={styles.statValue}>{quickStats.bestSleepDay}</Text>
+          </View>
+          
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Average Bedtime</Text>
+            <Text style={styles.statValue}>{quickStats.averageBedtime}</Text>
+          </View>
+          
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Common Wake Mood</Text>
+            <Text style={styles.statValue}>😊 {quickStats.commonWakeMood}</Text>
+          </View>
+          
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Consistency Score</Text>
+            <Text style={styles.statValue}>{quickStats.consistencyScore}%</Text>
+          </View>
+        </View>
       </View>
     );
   };
@@ -302,27 +492,6 @@ export default function SleepInsightsScreen() {
       </LinearGradient>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Date Navigation */}
-        <View style={styles.dateNavigation}>
-          {dates.map((date) => (
-            <TouchableOpacity
-              key={date}
-              style={[
-                styles.dateTab,
-                selectedDate === date && styles.dateTabActive
-              ]}
-              onPress={() => setSelectedDate(date)}
-            >
-              <Text style={[
-                styles.dateTabText,
-                selectedDate === date && styles.dateTabTextActive
-              ]}>
-                {date}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
         {/* Sleep Duration Chart */}
         <View style={styles.chartSection}>
           <Text style={styles.chartTitle}>Sleep Duration</Text>
@@ -360,6 +529,12 @@ export default function SleepInsightsScreen() {
         <View style={styles.recentSection}>
           <Text style={styles.sectionTitle}>Recent Sleep Entries</Text>
           {renderRecentEntries()}
+        </View>
+
+        {/* Quick Stats */}
+        <View style={styles.quickStatsSection}>
+          <Text style={styles.sectionTitle}>Quick Stats</Text>
+          {renderQuickStats()}
         </View>
 
         {/* Bottom Actions */}
@@ -453,30 +628,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1a1f36',
   },
-  dateNavigation: {
-    flexDirection: 'row',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    gap: 8,
-  },
-  dateTab: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  dateTabActive: {
-    backgroundColor: '#8B5CF6',
-  },
-  dateTabText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#9CA3AF',
-  },
-  dateTabTextActive: {
-    color: '#FFFFFF',
-  },
   chartSection: {
     paddingHorizontal: 24,
     marginBottom: 24,
@@ -556,6 +707,33 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#9CA3AF',
   },
+  noDataContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  noDataText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#9CA3AF',
+    marginBottom: 8,
+  },
+  noDataSubtext: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  logSleepButton: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    marginTop: 16,
+  },
+  logSleepButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
   metricsRow: {
     flexDirection: 'row',
     paddingHorizontal: 24,
@@ -608,7 +786,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 20,
     position: 'relative',
-    // Simplified donut - in production you'd use a proper chart library
   },
   donutCenter: {
     position: 'absolute',
@@ -669,7 +846,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
   entryDate: {
-    width: 60,
+    width: 80,
   },
   entryDayText: {
     fontSize: 12,
@@ -680,25 +857,45 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
-  },
-  entryDuration: {
-    flex: 1,
-    marginLeft: 16,
+    marginBottom: 2,
   },
   entryDurationText: {
-    fontSize: 16,
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+  },
+  entryQuality: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  qualityBadge: {
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginBottom: 4,
+  },
+  qualityBadgeText: {
+    fontSize: 12,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
   },
-  entryQuality: {
-    flexDirection: 'row',
-    gap: 4,
-    marginHorizontal: 16,
+  moodText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#FFFFFF',
+    marginBottom: 4,
   },
-  qualityDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  scoreContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  scoreText: {
+    fontSize: 10,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
   entryPattern: {
     width: 60,
@@ -711,6 +908,41 @@ const styles = StyleSheet.create({
   },
   sleepSegment: {
     height: '100%',
+  },
+  quickStatsSection: {
+    paddingHorizontal: 24,
+    marginBottom: 24,
+  },
+  quickStatsContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 16,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  statValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
   actionsContainer: {
     flexDirection: 'row',
