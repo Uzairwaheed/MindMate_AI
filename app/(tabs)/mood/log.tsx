@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, PanResponder } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { moodService } from '@/services/moodService';
+import Animated, { useSharedValue, useAnimatedStyle, useAnimatedGestureHandler, runOnJS } from 'react-native-reanimated';
+import { PanGestureHandler } from 'react-native-gesture-handler';
 
 export default function MoodLogScreen() {
   const [mood, setMood] = useState(7);
@@ -21,15 +23,15 @@ export default function MoodLogScreen() {
   ];
 
   const moodOptions = [
-    { emoji: '😢', label: 'Very Sad', value: 1 },
-    { emoji: '😟', label: 'Sad', value: 2 },
-    { emoji: '😕', label: 'Down', value: 3 },
-    { emoji: '😐', label: 'Neutral', value: 4 },
+    { emoji: '😢', label: 'Very Low', value: 1 },
+    { emoji: '😟', label: 'Low', value: 2 },
+    { emoji: '😕', label: 'Poor', value: 3 },
+    { emoji: '😐', label: 'Fair', value: 4 },
     { emoji: '🙂', label: 'Okay', value: 5 },
     { emoji: '😊', label: 'Good', value: 6 },
-    { emoji: '😄', label: 'Happy', value: 7 },
-    { emoji: '😁', label: 'Very Happy', value: 8 },
-    { emoji: '🤩', label: 'Excited', value: 9 },
+    { emoji: '😄', label: 'Great', value: 7 },
+    { emoji: '😁', label: 'Very Good', value: 8 },
+    { emoji: '🤩', label: 'Amazing', value: 9 },
     { emoji: '😍', label: 'Excellent', value: 10 },
   ];
 
@@ -66,23 +68,38 @@ export default function MoodLogScreen() {
     }
   };
 
-  const createSliderPanResponder = (value: number, setValue: (value: number) => void) => {
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => {
-        const { locationX } = evt.nativeEvent;
-        const sliderWidth = 280; // Approximate slider width
-        const newValue = Math.max(1, Math.min(10, Math.round((locationX / sliderWidth) * 10)));
-        setValue(newValue);
+  const createSlider = (
+    value: number,
+    setValue: (value: number) => void,
+    color: string = '#8B5CF6'
+  ) => {
+    const translateX = useSharedValue((value / 10) * 250);
+
+    const gestureHandler = useAnimatedGestureHandler({
+      onStart: (_, context) => {
+        context.startX = translateX.value;
       },
-      onPanResponderMove: (evt) => {
-        const { locationX } = evt.nativeEvent;
-        const sliderWidth = 280;
-        const newValue = Math.max(1, Math.min(10, Math.round((locationX / sliderWidth) * 10)));
-        setValue(newValue);
+      onActive: (event, context) => {
+        const newX = Math.max(0, Math.min(250, context.startX + event.translationX));
+        translateX.value = newX;
+        const newValue = Math.round((newX / 250) * 10);
+        runOnJS(setValue)(Math.max(1, newValue));
       },
     });
+
+    const animatedStyle = useAnimatedStyle(() => ({
+      transform: [{ translateX: translateX.value }],
+    }));
+
+    const trackStyle = useAnimatedStyle(() => ({
+      width: translateX.value,
+    }));
+
+    return {
+      gestureHandler,
+      animatedStyle,
+      trackStyle,
+    };
   };
 
   const renderSlider = (
@@ -91,86 +108,32 @@ export default function MoodLogScreen() {
     setValue: (value: number) => void,
     emoji: string,
     lowLabel: string,
-    highLabel: string
+    highLabel: string,
+    color: string = '#8B5CF6'
   ) => {
-    const panResponder = createSliderPanResponder(value, setValue);
+    const { gestureHandler, animatedStyle, trackStyle } = createSlider(value, setValue, color);
     
     return (
       <View style={styles.sliderSection}>
         <View style={styles.sliderHeader}>
           <Text style={styles.sliderLabel}>{label} {emoji}</Text>
+          <Text style={[styles.sliderValue, { color }]}>{value}/10</Text>
         </View>
-        <View style={styles.sliderContainer} {...panResponder.panHandlers}>
+        <View style={styles.sliderContainer}>
           <View style={styles.slider}>
-            <View 
-              style={[
-                styles.sliderTrack,
-                { width: `${(value / 10) * 100}%` }
-              ]} 
-            />
-            <View
-              style={[
-                styles.sliderThumb,
-                { left: `${(value / 10) * 100 - 2}%` }
-              ]}
-            />
+            <Animated.View style={[styles.sliderTrack, { backgroundColor: color }, trackStyle]} />
+            <PanGestureHandler onGestureEvent={gestureHandler}>
+              <Animated.View style={[styles.sliderThumb, { backgroundColor: color }, animatedStyle]} />
+            </PanGestureHandler>
           </View>
           <View style={styles.sliderLabels}>
             <Text style={styles.sliderLabelText}>😢 {lowLabel}</Text>
-            <Text style={styles.sliderValue}>{value}/10</Text>
             <Text style={styles.sliderLabelText}>😊 {highLabel}</Text>
           </View>
         </View>
       </View>
     );
   };
-
-  const renderMoodSelector = () => (
-    <View style={styles.moodSection}>
-      <Text style={styles.moodLabel}>Mood 😊</Text>
-      <View style={styles.moodGrid}>
-        {moodOptions.map((option) => (
-          <TouchableOpacity
-            key={option.value}
-            style={[
-              styles.moodOption,
-              mood === option.value && styles.moodOptionSelected
-            ]}
-            onPress={() => setMood(option.value)}
-          >
-            <Text style={styles.moodEmoji}>{option.emoji}</Text>
-            <Text style={[
-              styles.moodOptionLabel,
-              mood === option.value && styles.moodOptionLabelSelected
-            ]}>
-              {option.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      <View style={styles.moodSliderContainer}>
-        <View style={styles.moodSlider} {...createSliderPanResponder(mood, setMood).panHandlers}>
-          <View 
-            style={[
-              styles.moodSliderTrack,
-              { width: `${(mood / 10) * 100}%` }
-            ]} 
-          />
-          <View
-            style={[
-              styles.moodSliderThumb,
-              { left: `${(mood / 10) * 100 - 2}%` }
-            ]}
-          />
-        </View>
-        <View style={styles.moodSliderLabels}>
-          <Text style={styles.moodSliderLabel}>😢 Very Low</Text>
-          <Text style={styles.moodSliderValue}>{mood}/10</Text>
-          <Text style={styles.moodSliderLabel}>😊 Excellent</Text>
-        </View>
-      </View>
-    </View>
-  );
 
   return (
     <View style={styles.container}>
@@ -189,11 +152,37 @@ export default function MoodLogScreen() {
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.moodCard}>
-          {renderMoodSelector()}
-          {renderSlider('Energy Level', energy, setEnergy, '⚡', 'Exhausted', 'Energetic')}
-          {renderSlider('Anxiety Level', anxiety, setAnxiety, '😰', 'Calm', 'Very Anxious')}
-          {renderSlider('Stress Level', stress, setStress, '😤', 'Relaxed', 'Very Stressed')}
-          {renderSlider('Sleep Quality', sleep, setSleep, '😴', 'Poor', 'Excellent')}
+          {/* Mood Selector */}
+          <View style={styles.moodSection}>
+            <Text style={styles.moodLabel}>Mood 😊</Text>
+            <View style={styles.moodSliderContainer}>
+              <View style={styles.moodSlider}>
+                <View 
+                  style={[
+                    styles.moodSliderTrack,
+                    { width: `${(mood / 10) * 100}%` }
+                  ]} 
+                />
+                <View
+                  style={[
+                    styles.moodSliderThumb,
+                    { left: `${(mood / 10) * 100 - 2}%` }
+                  ]}
+                />
+              </View>
+              <View style={styles.moodSliderLabels}>
+                <Text style={styles.moodSliderLabel}>😢 Very Low</Text>
+                <Text style={styles.moodSliderValue}>{mood}/10</Text>
+                <Text style={styles.moodSliderLabel}>😊 Excellent</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Other Sliders */}
+          {renderSlider('Energy Level', energy, setEnergy, '⚡', 'Exhausted', 'Energetic', '#10B981')}
+          {renderSlider('Anxiety Level', anxiety, setAnxiety, '😰', 'Calm', 'Very Anxious', '#F59E0B')}
+          {renderSlider('Stress Level', stress, setStress, '😤', 'Relaxed', 'Very Stressed', '#EF4444')}
+          {renderSlider('Sleep Quality', sleep, setSleep, '😴', 'Poor', 'Excellent', '#6366F1')}
         </View>
 
         <View style={styles.activitiesSection}>
@@ -310,39 +299,6 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     marginBottom: 16,
   },
-  moodGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  moodOption: {
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 12,
-    backgroundColor: '#F9FAFB',
-    borderWidth: 2,
-    borderColor: 'transparent',
-    minWidth: 60,
-  },
-  moodOptionSelected: {
-    backgroundColor: '#8B5CF615',
-    borderColor: '#8B5CF6',
-  },
-  moodEmoji: {
-    fontSize: 20,
-    marginBottom: 4,
-  },
-  moodOptionLabel: {
-    fontSize: 10,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  moodOptionLabelSelected: {
-    color: '#8B5CF6',
-    fontFamily: 'Inter-Medium',
-  },
   moodSliderContainer: {
     paddingHorizontal: 4,
   },
@@ -392,12 +348,19 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   sliderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 12,
   },
   sliderLabel: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
     color: '#1F2937',
+  },
+  sliderValue: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
   },
   sliderContainer: {
     paddingHorizontal: 4,
@@ -408,10 +371,10 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     position: 'relative',
     marginBottom: 12,
+    width: 250,
   },
   sliderTrack: {
     height: '100%',
-    backgroundColor: '#8B5CF6',
     borderRadius: 3,
   },
   sliderThumb: {
@@ -419,7 +382,6 @@ const styles = StyleSheet.create({
     top: -6,
     width: 18,
     height: 18,
-    backgroundColor: '#8B5CF6',
     borderRadius: 9,
     borderWidth: 2,
     borderColor: '#FFFFFF',
@@ -438,11 +400,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
-  },
-  sliderValue: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#8B5CF6',
   },
   activitiesSection: {
     backgroundColor: '#FFFFFF',
@@ -514,6 +471,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
     height: 100,
+    textAlignVertical: 'top',
   },
   buttonContainer: {
     flexDirection: 'row',
