@@ -95,7 +95,7 @@ export default function SleepTrendsScreen() {
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
-            <Text style={styles.legendText}>< 6 hours (Poor)</Text>
+            <Text style={styles.legendText}>{'< 6 hours (Poor)'}</Text>
           </View>
         </View>
       </View>
