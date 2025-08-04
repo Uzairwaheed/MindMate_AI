@@ -24,9 +24,10 @@ export default function MoodTrackingScreen() {
 
   const loadMoodData = async () => {
     try {
-      const [stats, entries] = await Promise.all([
+      const [stats, chartData, entries] = await Promise.all([
         moodService.getMoodAnalytics(),
-        moodService.getChartData(7)
+        moodService.getChartData(7),
+        moodService.getUserMoodEntries(5)
       ]);
       
       setMoodStats({
