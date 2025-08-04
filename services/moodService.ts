@@ -1,26 +1,45 @@
 import { supabase } from '@/lib/supabase';
 
 interface MoodEntry {
-  id?: string;
-  user_id?: string;
+  id: string;
+  user_id: string;
   mood_score: number;
-  emotions?: string[];
-  notes?: string;
-  entry_date?: string;
-  entry_time?: string;
-  created_at?: string;
+  emotions: string[];
+  notes: string;
+  entry_date: string;
+  entry_time: string;
+  created_at: string;
+}
+
+export interface ParsedMoodEntry extends MoodEntry {
+  parsed: {
+    moodScore: number;
+    energyLevel: number;
+    anxietyLevel: number;
+    stressLevel: number;
+    sleepQuality: number;
+    userNotes: string;
+  };
 }
 
 interface CreateMoodEntryData {
   moodScore: number;
+  energyLevel: number;
+  anxietyLevel: number;
+  stressLevel: number;
+  sleepQuality: number;
   emotions?: string[];
   notes?: string;
   entryDate?: string;
   entryTime?: string;
 }
 
-interface UpdateMoodEntryData {
+export interface UpdateMoodEntryData {
   moodScore?: number;
+  energyLevel?: number;
+  anxietyLevel?: number;
+  stressLevel?: number;
+  sleepQuality?: number;
   emotions?: string[];
   notes?: string;
   entryDate?: string;
@@ -28,7 +47,55 @@ interface UpdateMoodEntryData {
 }
 
 class MoodService {
-  async createMoodEntry(entryData: CreateMoodEntryData): Promise<MoodEntry> {
+  private _formatMoodEntryNotes(data: CreateMoodEntryData | UpdateMoodEntryData): string {
+    const parts = [];
+    
+    if (data.moodScore !== undefined) parts.push(`Mood: ${data.moodScore}`);
+    if (data.energyLevel !== undefined) parts.push(`Energy: ${data.energyLevel}`);
+    if (data.anxietyLevel !== undefined) parts.push(`Anxiety: ${data.anxietyLevel}`);
+    if (data.stressLevel !== undefined) parts.push(`Stress: ${data.stressLevel}`);
+    if (data.sleepQuality !== undefined) parts.push(`Sleep: ${data.sleepQuality}`);
+    
+    if (data.notes && data.notes.trim()) {
+      parts.push(`Notes: ${data.notes.trim()}`);
+    }
+    
+    return parts.join(' | ');
+  }
+
+  private _parseMoodEntryNotes(entry: MoodEntry): ParsedMoodEntry {
+    const parsed = {
+      moodScore: entry.mood_score * 2, // Convert 1-5 to 1-10 scale
+      energyLevel: 5,
+      anxietyLevel: 5,
+      stressLevel: 5,
+      sleepQuality: 5,
+      userNotes: '',
+    };
+
+    if (entry.notes) {
+      const moodMatch = entry.notes.match(/Mood:\s*(\d+)/);
+      const energyMatch = entry.notes.match(/Energy:\s*(\d+)/);
+      const anxietyMatch = entry.notes.match(/Anxiety:\s*(\d+)/);
+      const stressMatch = entry.notes.match(/Stress:\s*(\d+)/);
+      const sleepMatch = entry.notes.match(/Sleep:\s*(\d+)/);
+      const notesMatch = entry.notes.match(/Notes:\s*(.+?)(?:\s*\||$)/);
+
+      if (moodMatch) parsed.moodScore = parseInt(moodMatch[1]);
+      if (energyMatch) parsed.energyLevel = parseInt(energyMatch[1]);
+      if (anxietyMatch) parsed.anxietyLevel = parseInt(anxietyMatch[1]);
+      if (stressMatch) parsed.stressLevel = parseInt(stressMatch[1]);
+      if (sleepMatch) parsed.sleepQuality = parseInt(sleepMatch[1]);
+      if (notesMatch) parsed.userNotes = notesMatch[1].trim();
+    }
+
+    return {
+      ...entry,
+      parsed,
+    };
+  }
+
+  async createMoodEntry(entryData: CreateMoodEntryData): Promise<ParsedMoodEntry> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -39,13 +106,15 @@ class MoodService {
       // Convert 1-10 scale to 1-5 scale for database constraint
       const moodScore = Math.ceil(entryData.moodScore / 2);
 
+      const formattedNotes = this._formatMoodEntryNotes(entryData);
+
       const { data, error } = await supabase
         .from('mood_entries')
         .insert({
           user_id: user.id,
           mood_score: moodScore,
           emotions: entryData.emotions || [],
-          notes: entryData.notes || '',
+          notes: formattedNotes,
           entry_date: entryData.entryDate || new Date().toISOString().split('T')[0],
           entry_time: entryData.entryTime || new Date().toTimeString().split(' ')[0],
         })
@@ -57,14 +126,14 @@ class MoodService {
         throw error;
       }
 
-      return data;
+      return this._parseMoodEntryNotes(data);
     } catch (error) {
       console.error('Create mood entry error:', error);
       throw error;
     }
   }
 
-  async getUserMoodEntries(limit?: number): Promise<MoodEntry[]> {
+  async getUserMoodEntries(limit?: number): Promise<ParsedMoodEntry[]> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -90,14 +159,14 @@ class MoodService {
         throw error;
       }
 
-      return data || [];
+      return (data || []).map(entry => this._parseMoodEntryNotes(entry));
     } catch (error) {
       console.error('Fetch mood entries error:', error);
       throw error;
     }
   }
 
-  async updateMoodEntry(entryId: string, updateData: UpdateMoodEntryData): Promise<MoodEntry> {
+  async updateMoodEntry(entryId: string, updateData: UpdateMoodEntryData): Promise<ParsedMoodEntry> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -108,16 +177,11 @@ class MoodService {
       const updatePayload: any = {};
 
       if (updateData.moodScore !== undefined) {
-        // Convert 1-10 scale to 1-5 scale for database constraint
         updatePayload.mood_score = Math.ceil(updateData.moodScore / 2);
       }
 
       if (updateData.emotions !== undefined) {
         updatePayload.emotions = updateData.emotions;
-      }
-
-      if (updateData.notes !== undefined) {
-        updatePayload.notes = updateData.notes;
       }
 
       if (updateData.entryDate !== undefined) {
@@ -127,6 +191,10 @@ class MoodService {
       if (updateData.entryTime !== undefined) {
         updatePayload.entry_time = updateData.entryTime;
       }
+
+      // Always update notes with formatted data
+      const formattedNotes = this._formatMoodEntryNotes(updateData);
+      updatePayload.notes = formattedNotes;
 
       const { data, error } = await supabase
         .from('mood_entries')
@@ -141,7 +209,7 @@ class MoodService {
         throw error;
       }
 
-      return data;
+      return this._parseMoodEntryNotes(data);
     } catch (error) {
       console.error('Update mood entry error:', error);
       throw error;
@@ -174,7 +242,7 @@ class MoodService {
 
   async getMoodAnalytics(days: number = 7): Promise<{
     averageMood: number;
-    trend: 'improving' | 'declining' | 'stable';
+    weeklyTrend: 'improving' | 'declining' | 'stable';
     totalEntries: number;
   }> {
     try {
@@ -188,72 +256,82 @@ class MoodService {
       const startDate = new Date();
       startDate.setDate(endDate.getDate() - days);
 
-      const { data, error } = await supabase
+      // Get current period entries
+      const { data: currentEntries, error: currentError } = await supabase
         .from('mood_entries')
-        .select('mood_score, entry_date')
+        .select('mood_score, notes, entry_date')
         .eq('user_id', user.id)
         .gte('entry_date', startDate.toISOString().split('T')[0])
         .lte('entry_date', endDate.toISOString().split('T')[0])
         .order('entry_date', { ascending: true });
 
-      if (error) {
-        console.error('Fetch mood analytics error:', error);
-        throw error;
+      if (currentError) {
+        console.error('Fetch current mood analytics error:', currentError);
+        throw currentError;
       }
 
-      const entries = data || [];
+      const entries = currentEntries || [];
       
       if (entries.length === 0) {
         return {
           averageMood: 0,
-          trend: 'stable',
+          weeklyTrend: 'stable',
           totalEntries: 0,
         };
       }
 
-      // Calculate average mood (convert back to 1-10 scale)
-      const averageMood = entries.reduce((sum, entry) => sum + (entry.mood_score * 2), 0) / entries.length;
+      // Calculate average mood using parsed values
+      const parsedEntries = entries.map(entry => this._parseMoodEntryNotes(entry));
+      const averageMood = parsedEntries.reduce((sum, entry) => sum + entry.parsed.moodScore, 0) / parsedEntries.length;
 
-      // Calculate trend
-      let trend: 'improving' | 'declining' | 'stable' = 'stable';
-      
-      if (entries.length >= 3) {
-        const firstHalf = entries.slice(0, Math.floor(entries.length / 2));
-        const secondHalf = entries.slice(Math.floor(entries.length / 2));
+      // Get previous period for trend comparison
+      const previousStartDate = new Date(startDate);
+      previousStartDate.setDate(previousStartDate.getDate() - days);
+      const previousEndDate = new Date(startDate);
+
+      const { data: previousEntries } = await supabase
+        .from('mood_entries')
+        .select('mood_score, notes')
+        .eq('user_id', user.id)
+        .gte('entry_date', previousStartDate.toISOString().split('T')[0])
+        .lt('entry_date', previousEndDate.toISOString().split('T')[0]);
+
+      let weeklyTrend: 'improving' | 'declining' | 'stable' = 'stable';
+
+      if (previousEntries && previousEntries.length > 0) {
+        const parsedPreviousEntries = previousEntries.map(entry => this._parseMoodEntryNotes(entry));
+        const previousAverage = parsedPreviousEntries.reduce((sum, entry) => sum + entry.parsed.moodScore, 0) / parsedPreviousEntries.length;
         
-        const firstHalfAvg = firstHalf.reduce((sum, entry) => sum + entry.mood_score, 0) / firstHalf.length;
-        const secondHalfAvg = secondHalf.reduce((sum, entry) => sum + entry.mood_score, 0) / secondHalf.length;
+        const difference = averageMood - previousAverage;
         
-        const difference = secondHalfAvg - firstHalfAvg;
-        
-        if (difference > 0.3) {
-          trend = 'improving';
-        } else if (difference < -0.3) {
-          trend = 'declining';
+        if (difference > 0.5) {
+          weeklyTrend = 'improving';
+        } else if (difference < -0.5) {
+          weeklyTrend = 'declining';
         }
       }
 
       return {
         averageMood: Math.round(averageMood * 10) / 10,
-        trend,
+        weeklyTrend,
         totalEntries: entries.length,
       };
     } catch (error) {
       console.error('Fetch mood analytics error:', error);
       return {
         averageMood: 0,
-        trend: 'stable',
+        weeklyTrend: 'stable',
         totalEntries: 0,
       };
     }
   }
 
   async getChartData(days: number = 7): Promise<Array<{
-    date: string;
-    mood: number;
-    energy: number;
-    calm: number;
-    relaxed: number;
+    date: Date;
+    mood: number | null;
+    energy: number | null;
+    calm: number | null;
+    relaxed: number | null;
   }>> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -281,32 +359,36 @@ class MoodService {
 
       const entries = data || [];
       
-      // Parse notes to extract slider values
-      return entries.map(entry => {
-        let energy = entry.mood_score * 2; // Default fallback
-        let calm = entry.mood_score * 2;
-        let relaxed = entry.mood_score * 2;
-
-        // Try to parse slider values from notes
-        if (entry.notes) {
-          const energyMatch = entry.notes.match(/Energy:\s*(\d+)/);
-          const anxietyMatch = entry.notes.match(/Anxiety:\s*(\d+)/);
-          const stressMatch = entry.notes.match(/Stress:\s*(\d+)/);
-          const sleepMatch = entry.notes.match(/Sleep:\s*(\d+)/);
-
-          if (energyMatch) energy = parseInt(energyMatch[1]);
-          if (anxietyMatch) calm = 11 - parseInt(anxietyMatch[1]); // Invert anxiety to calm
-          if (stressMatch) relaxed = 11 - parseInt(stressMatch[1]); // Invert stress to relaxed
+      // Generate chart data for the last N days
+      const chartPoints = [];
+      for (let i = days - 1; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        
+        const moodEntry = entries.find(e => e.entry_date === dateStr);
+        
+        if (moodEntry) {
+          const parsed = this._parseMoodEntryNotes(moodEntry);
+          chartPoints.push({
+            date: date,
+            mood: parsed.parsed.moodScore,
+            energy: parsed.parsed.energyLevel,
+            calm: 11 - parsed.parsed.anxietyLevel, // Invert anxiety to calm
+            relaxed: 11 - parsed.parsed.stressLevel, // Invert stress to relaxed
+          });
+        } else {
+          chartPoints.push({
+            date: date,
+            mood: null,
+            energy: null,
+            calm: null,
+            relaxed: null,
+          });
         }
+      }
 
-        return {
-          date: entry.entry_date,
-          mood: entry.mood_score * 2, // Convert back to 1-10 scale
-          energy,
-          calm,
-          relaxed,
-        };
-      });
+      return chartPoints;
     } catch (error) {
       console.error('Fetch chart data error:', error);
       return [];

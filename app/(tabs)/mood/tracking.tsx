@@ -26,7 +26,7 @@ export default function MoodTrackingScreen() {
     try {
       const [stats, entries] = await Promise.all([
         moodService.getMoodAnalytics(),
-        moodService.getUserMoodEntries(10)
+        moodService.getChartData(7)
       ]);
       
       setMoodStats({
@@ -36,25 +36,7 @@ export default function MoodTrackingScreen() {
       });
       
       setRecentEntries(entries);
-      
-      // Generate chart data for the last 7 days using real data
-      const chartPoints = [];
-      const today = new Date();
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-        
-        const moodEntry = entries.find(e => e.entry_date === dateStr);
-        chartPoints.push({
-          date: date,
-          mood: moodEntry ? moodEntry.parsed.moodScore : null,
-          energy: moodEntry ? moodEntry.parsed.energyLevel : null,
-          calm: moodEntry ? (10 - moodEntry.parsed.anxietyLevel) : null,
-          relaxed: moodEntry ? (10 - moodEntry.parsed.stressLevel) : null,
-        });
-      }
-      setChartData(chartPoints);
+      setChartData(chartData);
       
     } catch (error) {
       console.error('Failed to load mood data:', error);
