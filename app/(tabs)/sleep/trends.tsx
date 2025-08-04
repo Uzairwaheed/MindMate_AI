@@ -523,11 +523,15 @@ export default function SleepInsightsScreen() {
             {renderQualityPieChart()}
           </View>
 
-          {/* Recent Sleep Entries */}
+          {/* Recent Sleep Entries - FIXED WITH SCROLLVIEW */}
           <View style={styles.recentSection}>
             <Text style={styles.sectionTitle}>Recent Sleep Entries</Text>
             {filteredData.length > 0 ? (
-              <View style={styles.entriesContainer}>
+              <ScrollView 
+                style={styles.entriesContainer} 
+                showsVerticalScrollIndicator={false} 
+                nestedScrollEnabled={true}
+              >
                 {filteredData.slice(-5).reverse().map((entry) => (
                   <View key={entry.id} style={styles.entryCard}>
                     <View style={styles.entryHeader}>
@@ -559,7 +563,7 @@ export default function SleepInsightsScreen() {
                     </View>
                   </View>
                 ))}
-              </View>
+              </ScrollView>
             ) : (
               <View style={styles.noDataContainer}>
                 <Text style={styles.noDataText}>No recent sleep entries</Text>
@@ -825,11 +829,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 16,
     padding: 20,
-    marginBottom: 16,
+    marginBottom: 24,
     backdropFilter: 'blur(10px)',
   },
   entriesContainer: {
-    maxHeight: 200,
+    maxHeight: 180,
   },
   entryCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
