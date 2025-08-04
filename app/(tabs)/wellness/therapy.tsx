@@ -7,8 +7,8 @@ import { ChevronLeft, Phone, Globe, MessageCircle, MapPin, Heart } from 'lucide-
 export default function TherapyScreen() {
   const emergencyResources = [
     {
-      title: 'National Suicide Prevention Lifeline',
-      number: '988',
+      title: 'Suicide Prevention Hotline',
+      number: '042 3576 5951',
       description: '24/7 crisis support',
       urgent: true,
     },
@@ -22,10 +22,10 @@ export default function TherapyScreen() {
 
   const professionalResources = [
     {
-      title: 'Psychology Today',
-      description: 'Find therapists in your area',
+      title: 'MARHAM.PK',
+      description: 'Find psychologists in Pakistan',
       action: 'Visit Website',
-      url: 'https://www.psychologytoday.com',
+      url: 'https://www.marham.pk/doctors/karachi/psychologist',
       icon: Globe,
     },
     {
@@ -36,10 +36,10 @@ export default function TherapyScreen() {
       icon: MessageCircle,
     },
     {
-      title: 'SAMHSA National Helpline',
-      description: 'Treatment referral service',
-      action: 'Call 1-800-662-4357',
-      phone: '18006624357',
+      title: 'TASKEEN National Helpline',
+      description: 'Mental health support service',
+      action: 'Call 0316 8275336',
+      phone: '03168275336',
       icon: Phone,
     },
   ];

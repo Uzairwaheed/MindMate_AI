@@ -30,6 +30,31 @@ const quizQuestions = [
     question: "Over the last 2 weeks, how often have you had little interest or pleasure in doing things?",
     options: ["Not at all", "Several days", "More than half the days", "Nearly every day"],
     scores: [0, 1, 2, 3]
+  },
+  {
+    question: "Over the last 2 weeks, how often have you been worrying too much about different things?",
+    options: ["Not at all", "Several days", "More than half the days", "Nearly every day"],
+    scores: [0, 1, 2, 3]
+  },
+  {
+    question: "Over the last 2 weeks, how often have you been being so restless that it is hard to sit still?",
+    options: ["Not at all", "Several days", "More than half the days", "Nearly every day"],
+    scores: [0, 1, 2, 3]
+  },
+  {
+    question: "Over the last 2 weeks, how often have you had trouble falling or staying asleep, or sleeping too much?",
+    options: ["Not at all", "Several days", "More than half the days", "Nearly every day"],
+    scores: [0, 1, 2, 3]
+  },
+  {
+    question: "Over the last 2 weeks, how often have you been feeling tired or having little energy?",
+    options: ["Not at all", "Several days", "More than half the days", "Nearly every day"],
+    scores: [0, 1, 2, 3]
+  },
+  {
+    question: "Over the last 2 weeks, how often have you had poor appetite or overeating?",
+    options: ["Not at all", "Several days", "More than half the days", "Nearly every day"],
+    scores: [0, 1, 2, 3]
   }
 ];
 
@@ -76,14 +101,14 @@ export default function QuizScreen() {
   const calculateResults = () => {
     const totalScore = answers.reduce((sum, score) => sum + score, 0);
     
-    if (totalScore <= 4) {
+    if (totalScore <= 9) {
       return {
         level: 'Minimal',
         color: '#10B981',
         description: 'You appear to be managing well overall. Keep up the good work with self-care practices.',
         recommendation: 'Continue with regular wellness activities and maintain healthy habits.'
       };
-    } else if (totalScore <= 9) {
+    } else if (totalScore <= 19) {
       return {
         level: 'Mild',
         color: '#F59E0B',

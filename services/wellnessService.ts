@@ -196,9 +196,14 @@ class WellnessService {
         if (score <= 19) return 'Moderately Severe';
         return 'Severe';
       
+      case 'Mental Health Assessment':
+        if (score <= 9) return 'Minimal';
+        if (score <= 19) return 'Mild';
+        return 'Moderate to Severe';
+      
       default:
-        if (score <= 4) return 'Minimal';
-        if (score <= 9) return 'Mild';
+        if (score <= 9) return 'Minimal';
+        if (score <= 19) return 'Mild';
         return 'Moderate to Severe';
     }
   }

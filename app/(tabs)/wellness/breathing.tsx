@@ -15,6 +15,7 @@ export default function BreathingScreen() {
   const [isActive, setIsActive] = useState(false);
   const [phase, setPhase] = useState('Prepare');
   const [countdown, setCountdown] = useState(4);
+  const [setCount, setSetCount] = useState(0);
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -34,6 +35,8 @@ export default function BreathingScreen() {
               } else if (currentPhase === 'Hold') {
                 return 'Exhale';
               } else {
+                // Completed a full cycle (Inhale -> Hold -> Exhale)
+                setSetCount(prevCount => prevCount + 1);
                 return 'Inhale';
               }
             });
@@ -73,10 +76,11 @@ export default function BreathingScreen() {
     cancelAnimation(scale);
   };
 
-  const resetExercise = () => {
+  const stopExercise = () => {
     setIsActive(false);
     setPhase('Prepare');
     setCountdown(4);
+    setSetCount(0);
     cancelAnimation(scale);
     scale.value = withTiming(1, { duration: 500 });
   };
@@ -103,6 +107,10 @@ export default function BreathingScreen() {
           <Text style={styles.countdownText}>{countdown}</Text>
         </Animated.View>
 
+        <View style={styles.setCountContainer}>
+          <Text style={styles.setCountText}>Sets Completed: {setCount}</Text>
+        </View>
+
         <Text style={styles.instructionText}>
           {phase === 'Prepare' && 'Tap start when you\'re ready to begin'}
           {phase === 'Inhale' && 'Breathe in slowly through your nose'}
@@ -124,9 +132,9 @@ export default function BreathingScreen() {
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity style={styles.resetButton} onPress={resetExercise}>
+        <TouchableOpacity style={styles.stopButton} onPress={stopExercise}>
           <RotateCcw size={24} color="#6B7280" />
-          <Text style={styles.resetButtonText}>Reset</Text>
+          <Text style={styles.stopButtonText}>Stop</Text>
         </TouchableOpacity>
       </View>
 
@@ -208,6 +216,15 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     paddingHorizontal: 32,
   },
+  setCountContainer: {
+    marginBottom: 20,
+  },
+  setCountText: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#8B5CF6',
+    textAlign: 'center',
+  },
   controlsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -241,7 +258,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 6,
   },
-  resetButton: {
+  stopButton: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -262,7 +279,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginLeft: 8,
   },
-  resetButtonText: {
+  stopButtonText: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
     color: '#6B7280',
