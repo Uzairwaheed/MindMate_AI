@@ -152,28 +152,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session?.user) {
-        const profile = await authService.getCurrentUserProfile();
-        if (profile) {
-          const user: User = {
-            id: profile.id,
-            email: profile.email,
-            fullName: profile.full_name,
-            profilePictureUrl: profile.profile_picture_url || undefined,
-            age: profile.age || undefined,
-            gender: profile.gender || undefined,
-            occupation: profile.occupation || undefined,
-            concerns: profile.mental_health_concerns,
-            oauthProvider: profile.oauth_provider || undefined,
-          };
-          set({ user, isAuthenticated: true, loading: false });
-        }
-      } else {
-        set({ loading: false });
-      }
-
-      // Listen for auth changes
-      supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
+        try {
           const profile = await authService.getCurrentUserProfile();
           if (profile) {
             const user: User = {
@@ -188,9 +167,42 @@ export const useAuthStore = create<AuthStore>((set) => ({
               oauthProvider: profile.oauth_provider || undefined,
             };
             set({ user, isAuthenticated: true, loading: false });
+          } else {
+            set({ loading: false });
           }
-        } else if (event === 'SIGNED_OUT') {
-          set({ user: null, isAuthenticated: false, loading: false });
+        } catch (profileError) {
+          console.error('Profile fetch error:', profileError);
+          set({ loading: false });
+        }
+      } else {
+        set({ loading: false });
+      }
+
+      // Listen for auth changes
+      supabase.auth.onAuthStateChange(async (event, session) => {
+        try {
+          if (event === 'SIGNED_IN' && session?.user) {
+            const profile = await authService.getCurrentUserProfile();
+            if (profile) {
+              const user: User = {
+                id: profile.id,
+                email: profile.email,
+                fullName: profile.full_name,
+                profilePictureUrl: profile.profile_picture_url || undefined,
+                age: profile.age || undefined,
+                gender: profile.gender || undefined,
+                occupation: profile.occupation || undefined,
+                concerns: profile.mental_health_concerns,
+                oauthProvider: profile.oauth_provider || undefined,
+              };
+              set({ user, isAuthenticated: true, loading: false });
+            }
+          } else if (event === 'SIGNED_OUT') {
+            set({ user: null, isAuthenticated: false, loading: false });
+          }
+        } catch (authError) {
+          console.error('Auth state change error:', authError);
+          set({ loading: false });
         }
       });
     } catch (error) {

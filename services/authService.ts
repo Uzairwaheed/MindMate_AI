@@ -121,7 +121,10 @@ class AuthService {
         .eq('id', user.id)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Profile fetch error:', error);
+        return null;
+      }
       return data;
     } catch (error) {
       console.error('Get profile error:', error);
