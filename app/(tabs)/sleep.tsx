@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { Moon, Clock, TrendingUp, Plus, BarChart3 } from 'lucide-react-native';
+import { Moon, Clock, TrendingUp, Plus, ChartBar as BarChart3 } from 'lucide-react-native';
 import { sleepService, SleepEntry, SleepAnalytics } from '@/services/sleepService';
 
 export default function SleepScreen() {
