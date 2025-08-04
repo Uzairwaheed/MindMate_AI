@@ -327,7 +327,7 @@ export default function MoodTrackingScreen() {
           <View style={styles.statCard}>
             <Text style={styles.statEmoji}>{getTrendIcon(moodStats.trend)}</Text>
             <Text style={styles.statValue}>
-              {loading ? '...' : moodStats.trend.charAt(0).toUpperCase() + moodStats.trend.slice(1)}
+              {loading ? '...' : (moodStats.trend || 'stable').charAt(0).toUpperCase() + (moodStats.trend || 'stable').slice(1)}
             </Text>
             <Text style={styles.statLabel}>7-Day Trend</Text>
           </View>
