@@ -5,6 +5,7 @@ export default function MoodLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="journal" />
+      <Stack.Screen name="log" />
       <Stack.Screen name="sentiment" />
       <Stack.Screen name="tracking" />
     </Stack>

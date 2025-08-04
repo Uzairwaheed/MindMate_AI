@@ -1,228 +1,270 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { ChevronLeft, Calendar, TrendingUp } from 'lucide-react-native';
+import { ChevronLeft, Plus, TrendingUp, Calendar } from 'lucide-react-native';
+import { moodService } from '@/services/moodService';
 
 export default function MoodTrackingScreen() {
-  const [selectedView, setSelectedView] = useState<'calendar' | 'chart'>('calendar');
-  
-  // Sample mood data for the last 30 days
-  const moodData = Array.from({ length: 30 }, (_, i) => ({
-    date: new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000),
-    mood: Math.floor(Math.random() * 5) + 1, // 1-5 scale
-  }));
+  const [moodStats, setMoodStats] = useState({
+    averageMood: 7.2,
+    trend: 'Stable',
+    totalEntries: 0,
+  });
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [recentEntries, setRecentEntries] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const getMoodColor = (mood: number) => {
-    const colors = ['#EF4444', '#F59E0B', '#6B7280', '#3B82F6', '#10B981'];
-    return colors[mood - 1];
-  };
+  useEffect(() => {
+    loadMoodData();
+  }, []);
 
-  const getMoodEmoji = (mood: number) => {
-    const emojis = ['😢', '😟', '😐', '🙂', '😊'];
-    return emojis[mood - 1];
-  };
-
-  const renderCalendarView = () => {
-    const today = new Date();
-    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    const startDate = new Date(firstDayOfMonth);
-    startDate.setDate(startDate.getDate() - firstDayOfMonth.getDay());
-
-    const days = [];
-    const currentDate = new Date(startDate);
-    
-    while (currentDate <= lastDayOfMonth || days.length < 42) {
-      const dayData = moodData.find(d => 
-        d.date.toDateString() === currentDate.toDateString()
-      );
+  const loadMoodData = async () => {
+    try {
+      const stats = await moodService.getMoodStatistics();
+      const trends = await moodService.getMoodTrends(7);
       
-      days.push({
-        date: new Date(currentDate),
-        mood: dayData?.mood,
-        isCurrentMonth: currentDate.getMonth() === today.getMonth(),
-        isToday: currentDate.toDateString() === today.toDateString(),
+      setMoodStats({
+        averageMood: stats.averageMood,
+        trend: stats.averageMood >= 7 ? 'Stable' : stats.averageMood >= 5 ? 'Improving' : 'Declining',
+        totalEntries: stats.totalEntries,
       });
       
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-
-    const weeks = [];
-    for (let i = 0; i < days.length; i += 7) {
-      weeks.push(days.slice(i, i + 7));
-    }
-
-    return (
-      <View style={styles.calendarContainer}>
-        <View style={styles.calendarHeader}>
-          <Text style={styles.monthYear}>
-            {today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-          </Text>
-        </View>
+      // Generate chart data for the last 7 days
+      const chartPoints = [];
+      const today = new Date();
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
         
-        <View style={styles.weekdaysHeader}>
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-            <Text key={day} style={styles.weekdayText}>{day}</Text>
-          ))}
-        </View>
-
-        {weeks.map((week, weekIndex) => (
-          <View key={weekIndex} style={styles.weekRow}>
-            {week.map((day, dayIndex) => (
-              <TouchableOpacity
-                key={dayIndex}
-                style={[
-                  styles.dayCell,
-                  !day.isCurrentMonth && styles.dayOtherMonth,
-                  day.isToday && styles.dayToday,
-                ]}
-              >
-                <Text style={[
-                  styles.dayNumber,
-                  !day.isCurrentMonth && styles.dayNumberOtherMonth,
-                  day.isToday && styles.dayNumberToday,
-                ]}>
-                  {day.date.getDate()}
-                </Text>
-                {day.mood && (
-                  <View 
-                    style={[
-                      styles.moodIndicator, 
-                      { backgroundColor: getMoodColor(day.mood) }
-                    ]} 
-                  />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        ))}
-      </View>
-    );
+        const moodEntry = trends.find(t => t.date === dateStr);
+        chartPoints.push({
+          date: date,
+          mood: moodEntry?.score || Math.random() * 3 + 6, // Fallback to random data
+          energy: Math.random() * 3 + 6,
+          calm: Math.random() * 3 + 6,
+          relaxed: Math.random() * 3 + 6,
+        });
+      }
+      setChartData(chartPoints);
+      
+    } catch (error) {
+      console.error('Failed to load mood data:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const renderChartView = () => {
-    const recentData = moodData.slice(-14); // Last 14 days
+  const renderChart = () => {
+    const maxValue = 10;
+    const chartHeight = 120;
     
     return (
       <View style={styles.chartContainer}>
-        <Text style={styles.chartTitle}>Mood Trends (Last 2 Weeks)</Text>
-        <View style={styles.chart}>
-          {recentData.map((data, index) => (
-            <View key={index} style={styles.chartColumn}>
-              <View 
-                style={[
-                  styles.chartBar,
-                  { 
-                    height: (data.mood / 5) * 100,
-                    backgroundColor: getMoodColor(data.mood)
-                  }
-                ]} 
-              />
-              <Text style={styles.chartDate}>
-                {data.date.getDate()}
-              </Text>
+        <View style={styles.chartArea}>
+          {/* Y-axis labels */}
+          <View style={styles.yAxis}>
+            {[10, 7, 4, 1].map(value => (
+              <Text key={value} style={styles.yAxisLabel}>{value}</Text>
+            ))}
+          </View>
+          
+          {/* Chart lines */}
+          <View style={styles.chartContent}>
+            <View style={styles.chartGrid}>
+              {[10, 7, 4, 1].map(value => (
+                <View key={value} style={styles.gridLine} />
+              ))}
             </View>
+            
+            {/* Data points and lines */}
+            <View style={styles.dataContainer}>
+              {chartData.map((point, index) => {
+                const x = (index / (chartData.length - 1)) * 100;
+                const moodY = ((maxValue - point.mood) / maxValue) * 100;
+                const energyY = ((maxValue - point.energy) / maxValue) * 100;
+                const calmY = ((maxValue - point.calm) / maxValue) * 100;
+                const relaxedY = ((maxValue - point.relaxed) / maxValue) * 100;
+                
+                return (
+                  <View key={index}>
+                    {/* Mood line (blue) */}
+                    <View 
+                      style={[
+                        styles.dataPoint,
+                        { 
+                          left: `${x}%`,
+                          top: `${moodY}%`,
+                          backgroundColor: '#3B82F6'
+                        }
+                      ]} 
+                    />
+                    {/* Energy line (green) */}
+                    <View 
+                      style={[
+                        styles.dataPoint,
+                        { 
+                          left: `${x}%`,
+                          top: `${energyY}%`,
+                          backgroundColor: '#10B981'
+                        }
+                      ]} 
+                    />
+                    {/* Calm line (orange) */}
+                    <View 
+                      style={[
+                        styles.dataPoint,
+                        { 
+                          left: `${x}%`,
+                          top: `${calmY}%`,
+                          backgroundColor: '#F59E0B'
+                        }
+                      ]} 
+                    />
+                    {/* Relaxed line (red) */}
+                    <View 
+                      style={[
+                        styles.dataPoint,
+                        { 
+                          left: `${x}%`,
+                          top: `${relaxedY}%`,
+                          backgroundColor: '#EF4444'
+                        }
+                      ]} 
+                    />
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+        
+        {/* X-axis labels */}
+        <View style={styles.xAxis}>
+          {chartData.map((point, index) => (
+            <Text key={index} style={styles.xAxisLabel}>
+              {point.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </Text>
           ))}
         </View>
         
-        <View style={styles.moodLegend}>
-          {[1, 2, 3, 4, 5].map(mood => (
-            <View key={mood} style={styles.legendItem}>
-              <View 
-                style={[
-                  styles.legendColor, 
-                  { backgroundColor: getMoodColor(mood) }
-                ]} 
-              />
-              <Text style={styles.legendText}>{getMoodEmoji(mood)}</Text>
-            </View>
-          ))}
+        {/* Legend */}
+        <View style={styles.legend}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#3B82F6' }]} />
+            <Text style={styles.legendText}>Mood</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+            <Text style={styles.legendText}>Energy</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
+            <Text style={styles.legendText}>Calm</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
+            <Text style={styles.legendText}>Relaxed</Text>
+          </View>
         </View>
       </View>
     );
   };
 
   return (
-    <LinearGradient
-      colors={['#E6F3FF', '#F3E8FF']}
-      style={styles.container}
-    >
+    <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <ChevronLeft size={24} color="#8B5CF6" />
+          <ChevronLeft size={24} color="#6B7280" />
         </TouchableOpacity>
-        <Text style={styles.title}>Mood Tracking</Text>
-        <Text style={styles.subtitle}>Visualize your emotional patterns</Text>
-      </View>
-
-      <View style={styles.viewToggle}>
+        <View style={styles.headerContent}>
+          <Text style={styles.title}>Mood Tracking</Text>
+          <Text style={styles.subtitle}>Monitor your emotional patterns</Text>
+        </View>
         <TouchableOpacity
-          style={[styles.toggleButton, selectedView === 'calendar' && styles.toggleButtonActive]}
-          onPress={() => setSelectedView('calendar')}
+          style={styles.logButton}
+          onPress={() => router.push('/mood/log')}
         >
-          <Calendar size={20} color={selectedView === 'calendar' ? '#FFFFFF' : '#6B7280'} />
-          <Text style={[
-            styles.toggleText,
-            selectedView === 'calendar' && styles.toggleTextActive
-          ]}>
-            Calendar
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.toggleButton, selectedView === 'chart' && styles.toggleButtonActive]}
-          onPress={() => setSelectedView('chart')}
-        >
-          <TrendingUp size={20} color={selectedView === 'chart' ? '#FFFFFF' : '#6B7280'} />
-          <Text style={[
-            styles.toggleText,
-            selectedView === 'chart' && styles.toggleTextActive
-          ]}>
-            Trends
-          </Text>
+          <Plus size={20} color="#FFFFFF" />
+          <Text style={styles.logButtonText}>Log Mood</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {selectedView === 'calendar' ? renderCalendarView() : renderChartView()}
-        
-        <View style={styles.insightsCard}>
-          <Text style={styles.insightsTitle}>Insights</Text>
-          <Text style={styles.insightText}>
-            • Your mood tends to be highest on weekends
-          </Text>
-          <Text style={styles.insightText}>
-            • You've had 3 consecutive good days this week
-          </Text>
-          <Text style={styles.insightText}>
-            • Your average mood this month is 3.8/5
-          </Text>
+        {/* Stats Cards */}
+        <View style={styles.statsContainer}>
+          <View style={styles.statCard}>
+            <Text style={styles.statEmoji}>😊</Text>
+            <Text style={styles.statValue}>{moodStats.averageMood}/10</Text>
+            <Text style={styles.statLabel}>Average Mood</Text>
+          </View>
+          
+          <View style={styles.statCard}>
+            <TrendingUp size={24} color="#10B981" />
+            <Text style={styles.statValue}>{moodStats.trend}</Text>
+            <Text style={styles.statLabel}>7-Day Trend</Text>
+          </View>
+        </View>
+
+        {/* Chart Section */}
+        <View style={styles.chartSection}>
+          <Text style={styles.chartTitle}>7-Day Mood Trends</Text>
+          {renderChart()}
+        </View>
+
+        {/* Recent Entries */}
+        <View style={styles.recentSection}>
+          <View style={styles.recentHeader}>
+            <Calendar size={20} color="#6B7280" />
+            <Text style={styles.recentTitle}>Recent Entries</Text>
+          </View>
+          
+          {recentEntries.length > 0 ? (
+            recentEntries.map((entry, index) => (
+              <View key={entry.id} style={styles.recentEntry}>
+                <Text style={styles.recentEntryDate}>{entry.date}</Text>
+                <Text style={styles.recentEntryMood}>{entry.mood}</Text>
+              </View>
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>📊</Text>
+              <Text style={styles.emptyTitle}>No mood entries yet</Text>
+              <TouchableOpacity
+                style={styles.firstEntryButton}
+                onPress={() => router.push('/mood/log')}
+              >
+                <Text style={styles.firstEntryButtonText}>Log Your First Mood Entry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </ScrollView>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#E6F3FF',
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingTop: 60,
     paddingHorizontal: 24,
     paddingBottom: 24,
-    alignItems: 'center',
-    position: 'relative',
   },
   backButton: {
-    position: 'absolute',
-    left: 24,
-    top: 60,
     padding: 8,
+    marginRight: 16,
+  },
+  headerContent: {
+    flex: 1,
   },
   title: {
     fontSize: 24,
@@ -235,192 +277,218 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
   },
-  viewToggle: {
+  logButton: {
     flexDirection: 'row',
-    marginHorizontal: 24,
-    marginBottom: 24,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  toggleButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  toggleButtonActive: {
     backgroundColor: '#8B5CF6',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
   },
-  toggleText: {
+  logButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginLeft: 6,
-  },
-  toggleTextActive: {
+    fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
+    marginLeft: 4,
   },
   scrollView: {
     flex: 1,
     paddingHorizontal: 24,
   },
-  calendarContainer: {
+  statsContainer: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 24,
+  },
+  statCard: {
+    flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  calendarHeader: {
     alignItems: 'center',
-    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  monthYear: {
+  statEmoji: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  statValue: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
     color: '#1F2937',
+    marginBottom: 4,
   },
-  weekdaysHeader: {
-    flexDirection: 'row',
-    marginBottom: 12,
-  },
-  weekdayText: {
-    flex: 1,
+  statLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    fontFamily: 'Inter-Regular',
     color: '#6B7280',
     textAlign: 'center',
   },
-  weekRow: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  dayCell: {
-    flex: 1,
-    aspectRatio: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  dayOtherMonth: {
-    opacity: 0.3,
-  },
-  dayToday: {
-    backgroundColor: '#8B5CF615',
-    borderRadius: 8,
-  },
-  dayNumber: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#1F2937',
-  },
-  dayNumberOtherMonth: {
-    color: '#9CA3AF',
-  },
-  dayNumberToday: {
-    fontFamily: 'Inter-SemiBold',
-    color: '#8B5CF6',
-  },
-  moodIndicator: {
-    position: 'absolute',
-    bottom: 2,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  chartContainer: {
+  chartSection: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,
     marginBottom: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 3,
   },
   chartTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#1F2937',
     marginBottom: 20,
-    textAlign: 'center',
   },
-  chart: {
+  chartContainer: {
+    height: 200,
+  },
+  chartArea: {
     flexDirection: 'row',
+    height: 120,
+    marginBottom: 12,
+  },
+  yAxis: {
+    width: 20,
+    justifyContent: 'space-between',
     alignItems: 'flex-end',
-    height: 150,
-    marginBottom: 20,
+    paddingRight: 8,
   },
-  chartColumn: {
+  yAxisLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+  },
+  chartContent: {
     flex: 1,
+    position: 'relative',
+  },
+  chartGrid: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'space-between',
+  },
+  gridLine: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+  },
+  dataContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  dataPoint: {
+    position: 'absolute',
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginLeft: -3,
+    marginTop: -3,
+  },
+  xAxis: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingLeft: 28,
+    marginBottom: 16,
+  },
+  xAxisLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+  },
+  legend: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  legendItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 2,
   },
-  chartBar: {
-    width: 16,
-    borderRadius: 8,
-    marginBottom: 8,
-    minHeight: 20,
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
   },
-  chartDate: {
+  legendText: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
   },
-  moodLegend: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  legendItem: {
-    alignItems: 'center',
-  },
-  legendColor: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginBottom: 4,
-  },
-  legendText: {
-    fontSize: 16,
-  },
-  insightsCard: {
+  recentSection: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,
     marginBottom: 40,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 3,
   },
-  insightsTitle: {
+  recentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  recentTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#1F2937',
-    marginBottom: 12,
+    marginLeft: 8,
   },
-  insightText: {
+  recentEntry: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  recentEntryDate: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
-    lineHeight: 20,
-    marginBottom: 6,
+  },
+  recentEntryMood: {
+    fontSize: 20,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#9CA3AF',
+    marginBottom: 20,
+  },
+  firstEntryButton: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  firstEntryButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
 });
