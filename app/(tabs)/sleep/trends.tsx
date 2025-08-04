@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { ChevronLeft, ChevronDown, Settings, Bot, Star, Clock, BarChart3 } from 'lucide-react-native';
+import { ChevronLeft, ChevronDown, Settings, Bot, Star, Clock, ChartBar as BarChart3 } from 'lucide-react-native';
 import { sleepService } from '@/services/sleepService';
 import { Database } from '@/types/database';
 import Svg, { Circle, Path, Line, Text as SvgText, G, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
