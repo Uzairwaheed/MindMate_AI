@@ -162,7 +162,7 @@ export default function SleepTrendsScreen() {
           </View>
           
           <View style={styles.correlationBar}>
-            <Text style={styles.correlationLabel}>< 7 Hours Sleep</Text>
+            <Text style={styles.correlationLabel}>{'< 7 Hours Sleep'}</Text>
             <View style={styles.correlationBarContainer}>
               <View 
                 style={[
