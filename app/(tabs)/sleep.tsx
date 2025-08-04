@@ -1,26 +1,61 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Moon, Clock, TrendingUp, Settings, Plus } from 'lucide-react-native';
+import { router } from 'expo-router';
+import { Moon, Clock, TrendingUp, Plus, BarChart3 } from 'lucide-react-native';
+import { sleepService, SleepEntry, SleepAnalytics } from '@/services/sleepService';
 
 export default function SleepScreen() {
-  const [sleepData] = useState({
-    lastNight: '7h 32m',
-    average: '7h 15m',
-    quality: 'Good',
-    bedtime: '10:30 PM',
-    wakeTime: '6:00 AM'
+  const [recentEntry, setRecentEntry] = useState<SleepEntry | null>(null);
+  const [analytics, setAnalytics] = useState<SleepAnalytics>({
+    weeklyAverage: 0,
+    qualityAverage: 0,
+    consistency: 0,
+    totalEntries: 0,
+    insights: [],
   });
+  const [loading, setLoading] = useState(true);
 
-  const weeklyData = [
-    { day: 'Mon', hours: 7.5 },
-    { day: 'Tue', hours: 6.8 },
-    { day: 'Wed', hours: 8.2 },
-    { day: 'Thu', hours: 7.1 },
-    { day: 'Fri', hours: 6.5 },
-    { day: 'Sat', hours: 8.8 },
-    { day: 'Sun', hours: 7.9 },
-  ];
+  useEffect(() => {
+    loadSleepData();
+  }, []);
+
+  const loadSleepData = async () => {
+    try {
+      const [entries, analyticsData] = await Promise.all([
+        sleepService.getUserSleepEntries(1),
+        sleepService.getSleepAnalytics(7)
+      ]);
+      
+      setRecentEntry(entries[0] || null);
+      setAnalytics(analyticsData);
+    } catch (error) {
+      console.error('Failed to load sleep data:', error);
+      Alert.alert('Error', 'Failed to load sleep data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDuration = (hours: number): string => {
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    return `${h}h ${m}m`;
+  };
+
+  const getQualityText = (quality: number): string => {
+    if (quality <= 1) return 'Poor';
+    if (quality <= 2) return 'Fair';
+    if (quality <= 3) return 'Good';
+    if (quality <= 4) return 'Very Good';
+    return 'Excellent';
+  };
+
+  const getQualityColor = (quality: number): string => {
+    if (quality <= 2) return '#EF4444';
+    if (quality <= 3) return '#F59E0B';
+    return '#10B981';
+  };
 
   return (
     <LinearGradient
@@ -35,57 +70,92 @@ export default function SleepScreen() {
         </View>
 
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>Last Night</Text>
-          <Text style={styles.sleepDuration}>{sleepData.lastNight}</Text>
-          <Text style={styles.sleepQuality}>Sleep Quality: {sleepData.quality}</Text>
+          <Text style={styles.summaryTitle}>
+            {recentEntry ? 'Last Night' : 'No Recent Sleep Data'}
+          </Text>
+          {recentEntry ? (
+            <>
+              <Text style={styles.sleepDuration}>
+                {formatDuration(recentEntry.sleep_duration)}
+              </Text>
+              <Text style={[
+                styles.sleepQuality,
+                { color: getQualityColor(recentEntry.sleep_quality) }
+              ]}>
+                Sleep Quality: {getQualityText(recentEntry.sleep_quality)}
+              </Text>
+              
+              <View style={styles.timeContainer}>
+                <View style={styles.timeItem}>
+                  <Text style={styles.timeLabel}>Bedtime</Text>
+                  <Text style={styles.timeValue}>{recentEntry.bedtime}</Text>
+                </View>
+                <View style={styles.timeItem}>
+                  <Text style={styles.timeLabel}>Wake Time</Text>
+                  <Text style={styles.timeValue}>{recentEntry.wake_time}</Text>
+                </View>
+              </View>
+            </>
+          ) : (
+            <TouchableOpacity 
+              style={styles.firstLogButton}
+              onPress={() => router.push('/sleep/log')}
+            >
+              <Plus size={20} color="#FFFFFF" />
+              <Text style={styles.firstLogButtonText}>Log Your First Sleep</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.statsCard}>
+          <Text style={styles.cardTitle}>Sleep Statistics</Text>
           
-          <View style={styles.timeContainer}>
-            <View style={styles.timeItem}>
-              <Text style={styles.timeLabel}>Bedtime</Text>
-              <Text style={styles.timeValue}>{sleepData.bedtime}</Text>
+          <View style={styles.statsGrid}>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>
+                {loading ? '...' : formatDuration(analytics.weeklyAverage)}
+              </Text>
+              <Text style={styles.statLabel}>Weekly Average</Text>
             </View>
-            <View style={styles.timeItem}>
-              <Text style={styles.timeLabel}>Wake Time</Text>
-              <Text style={styles.timeValue}>{sleepData.wakeTime}</Text>
+            
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>
+                {loading ? '...' : `${analytics.qualityAverage}/5`}
+              </Text>
+              <Text style={styles.statLabel}>Avg Quality</Text>
+            </View>
+            
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>
+                {loading ? '...' : `${analytics.consistency}%`}
+              </Text>
+              <Text style={styles.statLabel}>Consistency</Text>
             </View>
           </View>
         </View>
 
-        <View style={styles.weeklyCard}>
-          <Text style={styles.cardTitle}>This Week</Text>
-          <View style={styles.chartContainer}>
-            {weeklyData.map((day, index) => (
-              <View key={index} style={styles.chartBar}>
-                <View 
-                  style={[
-                    styles.bar, 
-                    { height: (day.hours / 10) * 100 }
-                  ]} 
-                />
-                <Text style={styles.dayLabel}>{day.day}</Text>
-                <Text style={styles.hoursLabel}>{day.hours}h</Text>
-              </View>
-            ))}
-          </View>
-          <Text style={styles.averageText}>
-            Average: {sleepData.average}
-          </Text>
+        <View style={styles.insightsCard}>
+          <Text style={styles.cardTitle}>Sleep Insights</Text>
+          {analytics.insights.map((insight, index) => (
+            <Text key={index} style={styles.insightText}>• {insight}</Text>
+          ))}
         </View>
 
         <View style={styles.actionsContainer}>
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => router.push('/sleep/log')}
+          >
             <Plus size={24} color="#E5E7EB" />
             <Text style={styles.actionButtonText}>Log Sleep</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionButton}>
-            <TrendingUp size={24} color="#E5E7EB" />
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => router.push('/sleep/trends')}
+          >
+            <BarChart3 size={24} color="#E5E7EB" />
             <Text style={styles.actionButtonText}>View Trends</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.actionButton}>
-            <Settings size={24} color="#E5E7EB" />
-            <Text style={styles.actionButtonText}>Sleep Settings</Text>
           </TouchableOpacity>
         </View>
 
@@ -150,7 +220,6 @@ const styles = StyleSheet.create({
   sleepQuality: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#10B981',
     marginBottom: 20,
   },
   timeContainer: {
@@ -171,7 +240,22 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#E5E7EB',
   },
-  weeklyCard: {
+  firstLogButton: {
+    flexDirection: 'row',
+    backgroundColor: '#8B5CF6',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  firstLogButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    marginLeft: 8,
+  },
+  statsCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 16,
     padding: 20,
@@ -184,40 +268,37 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     textAlign: 'center',
   },
-  chartContainer: {
+  statsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    alignItems: 'flex-end',
-    height: 120,
-    marginBottom: 16,
   },
-  chartBar: {
+  statItem: {
     alignItems: 'center',
-    flex: 1,
   },
-  bar: {
-    width: 24,
-    backgroundColor: '#8B5CF6',
-    borderRadius: 12,
-    marginBottom: 8,
-    minHeight: 20,
+  statValue: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#E5E7EB',
+    marginBottom: 4,
   },
-  dayLabel: {
+  statLabel: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    marginBottom: 2,
-  },
-  hoursLabel: {
-    fontSize: 10,
-    fontFamily: 'Inter-Regular',
-    color: '#D1D5DB',
-  },
-  averageText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
     color: '#D1D5DB',
     textAlign: 'center',
+  },
+  insightsCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+  },
+  insightText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#D1D5DB',
+    lineHeight: 20,
+    marginBottom: 6,
   },
   actionsContainer: {
     flexDirection: 'row',
@@ -229,7 +310,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
-    minWidth: 80,
+    minWidth: 120,
   },
   actionButtonText: {
     fontSize: 12,
