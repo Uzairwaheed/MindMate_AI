@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { ChevronLeft, Plus, TrendingUp, Calendar, Edit, Trash2, X } from 'lucide-react-native';
+import { ChevronLeft, Plus, TrendingUp, Calendar, Edit, Trash2, X, Check } from 'lucide-react-native';
 import { moodService, ParsedMoodEntry, UpdateMoodEntryData } from '@/services/moodService';
-import Animated, { useSharedValue, useAnimatedStyle, useAnimatedGestureHandler, runOnJS } from 'react-native-reanimated';
-import { PanGestureHandler } from 'react-native-gesture-handler';
 
 export default function MoodTrackingScreen() {
   const [moodStats, setMoodStats] = useState({
@@ -39,7 +37,7 @@ export default function MoodTrackingScreen() {
       
       setRecentEntries(entries);
       
-      // Generate chart data for the last 7 days
+      // Generate chart data for the last 7 days using real data
       const chartPoints = [];
       const today = new Date();
       for (let i = 6; i >= 0; i--) {
@@ -87,7 +85,7 @@ export default function MoodTrackingScreen() {
       await moodService.updateMoodEntry(selectedEntry.id, editData);
       setShowModal(false);
       setEditMode(false);
-      loadMoodData(); // Refresh data
+      await loadMoodData(); // Refresh data
       Alert.alert('Success', 'Mood entry updated successfully!');
     } catch (error) {
       Alert.alert('Error', 'Failed to update mood entry. Please try again.');
@@ -109,7 +107,7 @@ export default function MoodTrackingScreen() {
             try {
               await moodService.deleteMoodEntry(selectedEntry.id);
               setShowModal(false);
-              loadMoodData(); // Refresh data
+              await loadMoodData(); // Refresh data
               Alert.alert('Success', 'Mood entry deleted successfully!');
             } catch (error) {
               Alert.alert('Error', 'Failed to delete mood entry. Please try again.');
@@ -120,62 +118,10 @@ export default function MoodTrackingScreen() {
     );
   };
 
-  const renderSlider = (
-    label: string,
-    value: number,
-    onValueChange: (value: number) => void,
-    emoji: string,
-    lowLabel: string,
-    highLabel: string
-  ) => {
-    const translateX = useSharedValue((value / 10) * 250);
-
-    const gestureHandler = useAnimatedGestureHandler({
-      onStart: (_, context) => {
-        context.startX = translateX.value;
-      },
-      onActive: (event, context) => {
-        const newX = Math.max(0, Math.min(250, context.startX + event.translationX));
-        translateX.value = newX;
-        const newValue = Math.round((newX / 250) * 10);
-        runOnJS(onValueChange)(Math.max(1, newValue));
-      },
-    });
-
-    const animatedStyle = useAnimatedStyle(() => ({
-      transform: [{ translateX: translateX.value }],
-    }));
-
-    return (
-      <View style={styles.sliderSection}>
-        <View style={styles.sliderHeader}>
-          <Text style={styles.sliderLabel}>{label} {emoji}</Text>
-          <Text style={styles.sliderValue}>{value}/10</Text>
-        </View>
-        <View style={styles.sliderContainer}>
-          <View style={styles.slider}>
-            <View 
-              style={[
-                styles.sliderTrack,
-                { width: `${(value / 10) * 100}%` }
-              ]} 
-            />
-            <PanGestureHandler onGestureEvent={gestureHandler}>
-              <Animated.View style={[styles.sliderThumb, animatedStyle]} />
-            </PanGestureHandler>
-          </View>
-          <View style={styles.sliderLabels}>
-            <Text style={styles.sliderLabelText}>{lowLabel}</Text>
-            <Text style={styles.sliderLabelText}>{highLabel}</Text>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
   const renderChart = () => {
     const maxValue = 10;
     const chartHeight = 120;
+    const chartWidth = 280;
     
     return (
       <View style={styles.chartContainer}>
@@ -189,6 +135,7 @@ export default function MoodTrackingScreen() {
           
           {/* Chart content */}
           <View style={styles.chartContent}>
+            {/* Grid lines */}
             <View style={styles.chartGrid}>
               {[10, 7, 4, 1].map(value => (
                 <View key={value} style={styles.gridLine} />
@@ -198,50 +145,68 @@ export default function MoodTrackingScreen() {
             {/* Data points and lines */}
             <View style={styles.dataContainer}>
               {chartData.map((point, index) => {
-                if (index === 0) return null;
+                const x = (index / (chartData.length - 1)) * 100;
                 
-                const prevPoint = chartData[index - 1];
-                const x1 = ((index - 1) / (chartData.length - 1)) * 100;
-                const x2 = (index / (chartData.length - 1)) * 100;
-                
-                // Draw lines between points for each metric
+                // Render data points for each metric
                 const metrics = [
-                  { key: 'mood', color: '#3B82F6', prev: prevPoint.mood, curr: point.mood },
-                  { key: 'energy', color: '#10B981', prev: prevPoint.energy, curr: point.energy },
-                  { key: 'calm', color: '#F59E0B', prev: prevPoint.calm, curr: point.calm },
-                  { key: 'relaxed', color: '#EF4444', prev: prevPoint.relaxed, curr: point.relaxed },
+                  { key: 'mood', color: '#3B82F6', value: point.mood },
+                  { key: 'energy', color: '#10B981', value: point.energy },
+                  { key: 'calm', color: '#F59E0B', value: point.calm },
+                  { key: 'relaxed', color: '#EF4444', value: point.relaxed },
                 ];
 
                 return metrics.map(metric => {
-                  if (metric.prev === null || metric.curr === null) return null;
+                  if (metric.value === null) return null;
                   
-                  const y1 = ((maxValue - metric.prev) / maxValue) * 100;
-                  const y2 = ((maxValue - metric.curr) / maxValue) * 100;
+                  const y = ((maxValue - metric.value) / maxValue) * 100;
                   
                   return (
                     <View key={`${index}-${metric.key}`}>
-                      {/* Previous point */}
                       <View 
                         style={[
                           styles.dataPoint,
                           { 
-                            left: `${x1}%`,
-                            top: `${y1}%`,
+                            left: `${x}%`,
+                            top: `${y}%`,
                             backgroundColor: metric.color
                           }
                         ]} 
                       />
-                      {/* Current point */}
-                      <View 
-                        style={[
-                          styles.dataPoint,
-                          { 
-                            left: `${x2}%`,
-                            top: `${y2}%`,
-                            backgroundColor: metric.color
-                          }
-                        ]} 
-                      />
+                      {/* Draw line to next point */}
+                      {index < chartData.length - 1 && (
+                        (() => {
+                          const nextPoint = chartData[index + 1];
+                          const nextMetric = nextPoint[metric.key === 'mood' ? 'mood' : 
+                                                     metric.key === 'energy' ? 'energy' :
+                                                     metric.key === 'calm' ? 'calm' : 'relaxed'];
+                          
+                          if (nextMetric === null) return null;
+                          
+                          const x2 = ((index + 1) / (chartData.length - 1)) * 100;
+                          const y2 = ((maxValue - nextMetric) / maxValue) * 100;
+                          
+                          const lineLength = Math.sqrt(
+                            Math.pow((x2 - x) * chartWidth / 100, 2) + 
+                            Math.pow((y2 - y) * chartHeight / 100, 2)
+                          );
+                          const angle = Math.atan2((y2 - y) * chartHeight / 100, (x2 - x) * chartWidth / 100) * 180 / Math.PI;
+                          
+                          return (
+                            <View
+                              style={[
+                                styles.chartLine,
+                                {
+                                  left: `${x}%`,
+                                  top: `${y}%`,
+                                  width: lineLength,
+                                  backgroundColor: metric.color,
+                                  transform: [{ rotate: `${angle}deg` }],
+                                }
+                              ]}
+                            />
+                          );
+                        })()
+                      )}
                     </View>
                   );
                 }).filter(Boolean);
@@ -254,7 +219,7 @@ export default function MoodTrackingScreen() {
         <View style={styles.xAxis}>
           {chartData.map((point, index) => (
             <Text key={index} style={styles.xAxisLabel}>
-              {point.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              {point.date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}
             </Text>
           ))}
         </View>
@@ -301,6 +266,49 @@ export default function MoodTrackingScreen() {
     return '😊';
   };
 
+  const renderSlider = (
+    label: string,
+    value: number,
+    onValueChange: (value: number) => void,
+    emoji: string,
+    lowLabel: string,
+    highLabel: string,
+    color: string = '#8B5CF6'
+  ) => (
+    <View style={styles.editSliderSection}>
+      <View style={styles.editSliderHeader}>
+        <Text style={styles.editSliderLabel}>{label} {emoji}</Text>
+        <Text style={[styles.editSliderValue, { color }]}>{value}/10</Text>
+      </View>
+      <View style={styles.editSliderContainer}>
+        <View style={styles.editSlider}>
+          <View 
+            style={[
+              styles.editSliderTrack,
+              { width: `${(value / 10) * 100}%`, backgroundColor: color }
+            ]} 
+          />
+          <TouchableOpacity
+            style={[
+              styles.editSliderThumb,
+              { left: `${(value / 10) * 100 - 2}%`, backgroundColor: color }
+            ]}
+            onPressIn={(e) => {
+              // Simple touch-based slider
+              const { locationX } = e.nativeEvent;
+              const newValue = Math.round((locationX / 250) * 10);
+              onValueChange(Math.max(1, Math.min(10, newValue)));
+            }}
+          />
+        </View>
+        <View style={styles.editSliderLabels}>
+          <Text style={styles.editSliderLabelText}>{lowLabel}</Text>
+          <Text style={styles.editSliderLabelText}>{highLabel}</Text>
+        </View>
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -308,7 +316,7 @@ export default function MoodTrackingScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <ChevronLeft size={24} color="#6B7280" />
+          <ChevronLeft size={24} color="#8B5CF6" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
           <Text style={styles.title}>Mood Tracking</Text>
@@ -366,7 +374,7 @@ export default function MoodTrackingScreen() {
                 <View style={styles.recentEntryContent}>
                   <Text style={styles.recentEntryDate}>
                     {new Date(entry.entry_date).toLocaleDateString('en-US', {
-                      month: 'short',
+                      month: 'numeric',
                       day: 'numeric',
                       year: 'numeric'
                     })}
@@ -376,8 +384,13 @@ export default function MoodTrackingScreen() {
                   </Text>
                 </View>
                 <Text style={styles.recentEntryDetails}>
-                  Mood: {entry.parsed.moodScore}/10 • Energy: {entry.parsed.energyLevel}/10
+                  Mood: {entry.parsed.moodScore}/10 • Energy: {entry.parsed.energyLevel}/10 • Anxiety: {entry.parsed.anxietyLevel}/10
                 </Text>
+                {entry.parsed.userNotes && (
+                  <Text style={styles.recentEntryNotes} numberOfLines={1}>
+                    "{entry.parsed.userNotes}"
+                  </Text>
+                )}
               </TouchableOpacity>
             ))
           ) : (
@@ -430,7 +443,8 @@ export default function MoodTrackingScreen() {
                       (value) => setEditData(prev => ({ ...prev, moodScore: value })),
                       '😊',
                       'Very Low',
-                      'Excellent'
+                      'Excellent',
+                      '#8B5CF6'
                     )}
                     {renderSlider(
                       'Energy Level',
@@ -438,7 +452,8 @@ export default function MoodTrackingScreen() {
                       (value) => setEditData(prev => ({ ...prev, energyLevel: value })),
                       '⚡',
                       'Exhausted',
-                      'Energetic'
+                      'Energetic',
+                      '#10B981'
                     )}
                     {renderSlider(
                       'Anxiety Level',
@@ -446,7 +461,8 @@ export default function MoodTrackingScreen() {
                       (value) => setEditData(prev => ({ ...prev, anxietyLevel: value })),
                       '😰',
                       'Calm',
-                      'Very Anxious'
+                      'Very Anxious',
+                      '#F59E0B'
                     )}
                     {renderSlider(
                       'Stress Level',
@@ -454,7 +470,8 @@ export default function MoodTrackingScreen() {
                       (value) => setEditData(prev => ({ ...prev, stressLevel: value })),
                       '😤',
                       'Relaxed',
-                      'Very Stressed'
+                      'Very Stressed',
+                      '#EF4444'
                     )}
                     {renderSlider(
                       'Sleep Quality',
@@ -462,7 +479,8 @@ export default function MoodTrackingScreen() {
                       (value) => setEditData(prev => ({ ...prev, sleepQuality: value })),
                       '😴',
                       'Poor',
-                      'Excellent'
+                      'Excellent',
+                      '#6366F1'
                     )}
 
                     <View style={styles.notesSection}>
@@ -706,6 +724,11 @@ const styles = StyleSheet.create({
     marginLeft: -3,
     marginTop: -3,
   },
+  chartLine: {
+    position: 'absolute',
+    height: 2,
+    transformOrigin: 'left center',
+  },
   xAxis: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -784,6 +807,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
+    marginBottom: 4,
+  },
+  recentEntryNotes: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    fontStyle: 'italic',
   },
   emptyState: {
     alignItems: 'center',
@@ -922,32 +952,31 @@ const styles = StyleSheet.create({
   editForm: {
     paddingBottom: 40,
   },
-  sliderSection: {
+  editSliderSection: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
   },
-  sliderHeader: {
+  editSliderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
   },
-  sliderLabel: {
+  editSliderLabel: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
     color: '#1F2937',
   },
-  sliderValue: {
+  editSliderValue: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#8B5CF6',
   },
-  sliderContainer: {
+  editSliderContainer: {
     paddingHorizontal: 4,
   },
-  slider: {
+  editSlider: {
     height: 6,
     backgroundColor: '#E5E7EB',
     borderRadius: 3,
@@ -955,17 +984,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     width: 250,
   },
-  sliderTrack: {
+  editSliderTrack: {
     height: '100%',
-    backgroundColor: '#8B5CF6',
     borderRadius: 3,
   },
-  sliderThumb: {
+  editSliderThumb: {
     position: 'absolute',
     top: -6,
     width: 18,
     height: 18,
-    backgroundColor: '#8B5CF6',
     borderRadius: 9,
     borderWidth: 2,
     borderColor: '#FFFFFF',
@@ -975,12 +1002,12 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  sliderLabels: {
+  editSliderLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  sliderLabelText: {
+  editSliderLabelText: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',

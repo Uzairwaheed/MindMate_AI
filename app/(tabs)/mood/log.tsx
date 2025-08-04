@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, PanResponder } from 'react-native';
 import { router } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { moodService } from '@/services/moodService';
-import Animated, { useSharedValue, useAnimatedStyle, useAnimatedGestureHandler, runOnJS } from 'react-native-reanimated';
-import { PanGestureHandler } from 'react-native-gesture-handler';
 
 export default function MoodLogScreen() {
   const [mood, setMood] = useState(7);
@@ -68,38 +66,20 @@ export default function MoodLogScreen() {
     }
   };
 
-  const createSlider = (
-    value: number,
-    setValue: (value: number) => void,
-    color: string = '#8B5CF6'
-  ) => {
-    const translateX = useSharedValue((value / 10) * 250);
-
-    const gestureHandler = useAnimatedGestureHandler({
-      onStart: (_, context) => {
-        context.startX = translateX.value;
+  const createSlider = (value: number, setValue: (value: number) => void, color: string = '#8B5CF6') => {
+    const panResponder = PanResponder.create({
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {},
+      onPanResponderMove: (evt, gestureState) => {
+        const sliderWidth = 250;
+        const newX = Math.max(0, Math.min(sliderWidth, gestureState.moveX - 50)); // Adjust for container offset
+        const newValue = Math.round((newX / sliderWidth) * 10);
+        setValue(Math.max(1, Math.min(10, newValue)));
       },
-      onActive: (event, context) => {
-        const newX = Math.max(0, Math.min(250, context.startX + event.translationX));
-        translateX.value = newX;
-        const newValue = Math.round((newX / 250) * 10);
-        runOnJS(setValue)(Math.max(1, newValue));
-      },
+      onPanResponderRelease: () => {},
     });
 
-    const animatedStyle = useAnimatedStyle(() => ({
-      transform: [{ translateX: translateX.value }],
-    }));
-
-    const trackStyle = useAnimatedStyle(() => ({
-      width: translateX.value,
-    }));
-
-    return {
-      gestureHandler,
-      animatedStyle,
-      trackStyle,
-    };
+    return panResponder;
   };
 
   const renderSlider = (
@@ -111,7 +91,7 @@ export default function MoodLogScreen() {
     highLabel: string,
     color: string = '#8B5CF6'
   ) => {
-    const { gestureHandler, animatedStyle, trackStyle } = createSlider(value, setValue, color);
+    const panResponder = createSlider(value, setValue, color);
     
     return (
       <View style={styles.sliderSection}>
@@ -119,12 +99,10 @@ export default function MoodLogScreen() {
           <Text style={styles.sliderLabel}>{label} {emoji}</Text>
           <Text style={[styles.sliderValue, { color }]}>{value}/10</Text>
         </View>
-        <View style={styles.sliderContainer}>
+        <View style={styles.sliderContainer} {...panResponder.panHandlers}>
           <View style={styles.slider}>
-            <Animated.View style={[styles.sliderTrack, { backgroundColor: color }, trackStyle]} />
-            <PanGestureHandler onGestureEvent={gestureHandler}>
-              <Animated.View style={[styles.sliderThumb, { backgroundColor: color }, animatedStyle]} />
-            </PanGestureHandler>
+            <View style={[styles.sliderTrack, { backgroundColor: color, width: `${(value / 10) * 100}%` }]} />
+            <View style={[styles.sliderThumb, { backgroundColor: color, left: `${(value / 10) * 100 - 2}%` }]} />
           </View>
           <View style={styles.sliderLabels}>
             <Text style={styles.sliderLabelText}>😢 {lowLabel}</Text>
@@ -142,7 +120,7 @@ export default function MoodLogScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <ChevronLeft size={24} color="#6B7280" />
+          <ChevronLeft size={24} color="#8B5CF6" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
           <Text style={styles.title}>Log Your Mood</Text>
@@ -155,7 +133,7 @@ export default function MoodLogScreen() {
           {/* Mood Selector */}
           <View style={styles.moodSection}>
             <Text style={styles.moodLabel}>Mood 😊</Text>
-            <View style={styles.moodSliderContainer}>
+            <View style={styles.moodSliderContainer} {...createSlider(mood, setMood).panHandlers}>
               <View style={styles.moodSlider}>
                 <View 
                   style={[

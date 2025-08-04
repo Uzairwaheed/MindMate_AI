@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, PanResponder } from 'react-native';
 import { router } from 'expo-router';
 import { ChevronLeft, Calendar, Save, BookOpen } from 'lucide-react-native';
 import { journalService } from '@/services/journalService';
@@ -61,6 +61,23 @@ export default function JournalScreen() {
     return '😊';
   };
 
+  // Create responsive slider using PanResponder
+  const createMoodSlider = () => {
+    const panResponder = PanResponder.create({
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {},
+      onPanResponderMove: (evt, gestureState) => {
+        const sliderWidth = 250;
+        const newX = Math.max(0, Math.min(sliderWidth, gestureState.moveX - 50));
+        const newValue = Math.round((newX / sliderWidth) * 10);
+        setMoodRating(Math.max(1, Math.min(10, newValue)));
+      },
+      onPanResponderRelease: () => {},
+    });
+
+    return panResponder;
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -81,7 +98,7 @@ export default function JournalScreen() {
           <View style={styles.dateSection}>
             <Text style={styles.dateLabel}>Date</Text>
             <View style={styles.dateContainer}>
-              <Calendar size={16} color="#8B5CF6" />
+              <Calendar size={16} color="#10B981" />
               <Text style={styles.dateText}>
                 {selectedDate.toLocaleDateString('en-US', { 
                   month: '2-digit',
@@ -96,7 +113,7 @@ export default function JournalScreen() {
             <Text style={styles.moodLabel}>Mood Today</Text>
             <View style={styles.moodContainer}>
               <Text style={styles.moodEmoji}>{getMoodEmoji(moodRating)}</Text>
-              <View style={styles.sliderContainer}>
+              <View style={styles.sliderContainer} {...createMoodSlider().panHandlers}>
                 <View style={styles.slider}>
                   <View 
                     style={[
@@ -104,20 +121,12 @@ export default function JournalScreen() {
                       { width: `${(moodRating / 10) * 100}%` }
                     ]} 
                   />
-                  <TouchableOpacity
+                  <View
                     style={[
                       styles.sliderThumb,
                       { left: `${(moodRating / 10) * 100 - 2}%` }
                     ]}
-                    onPressIn={(e) => {
-                      // Simple slider implementation
-                    }}
                   />
-                </View>
-                <View style={styles.sliderLabels}>
-                  <Text style={styles.sliderLabel}>😢 Very Low</Text>
-                  <Text style={styles.sliderValue}>{moodRating}/10</Text>
-                  <Text style={styles.sliderLabel}>😊 Excellent</Text>
                 </View>
               </View>
             </View>
@@ -317,21 +326,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-  },
-  sliderLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  sliderLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  sliderValue: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#3B82F6',
   },
   journalSection: {
     marginBottom: 24,
