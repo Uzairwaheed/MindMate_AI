@@ -260,18 +260,22 @@ export default function SleepInsightsScreen() {
     poor: '#EF4444'
   };
 
-  const periods = ['week', 'month', '3months'];
-  const periodLabels = {
-    week: 'Last Week',
-    month: 'Last Month',
-    '3months': 'Last 3 Months'
-  };
+  const periods = [
+    { key: 'week', label: 'Last Week' },
+    { key: 'month', label: 'Last Month' },
+    { key: '3months', label: 'Last 3 Months' }
+  ];
 
   // Animated styles
   const fadeStyle = useAnimatedStyle(() => ({
     opacity: fadeAnim.value,
     transform: [{ translateY: slideAnim.value }],
   }));
+
+  const handlePeriodSelect = (selectedPeriod: string) => {
+    setTimePeriod(selectedPeriod);
+    setShowPeriodModal(false);
+  };
 
   const renderSleepChart = () => {
     if (chartData.length === 0) {
@@ -488,8 +492,11 @@ export default function SleepInsightsScreen() {
         <TouchableOpacity
           style={styles.periodSelector}
           onPress={() => setShowPeriodModal(true)}
+          activeOpacity={0.7}
         >
-          <Text style={styles.periodText}>{periodLabels[timePeriod as keyof typeof periodLabels]}</Text>
+          <Text style={styles.periodText}>
+            {periods.find(p => p.key === timePeriod)?.label || 'Last Week'}
+          </Text>
           <ChevronDown size={16} color="#FFFFFF" />
         </TouchableOpacity>
 
@@ -620,33 +627,41 @@ export default function SleepInsightsScreen() {
         </View>
       </Animated.View>
 
-      {/* Period Selection Modal */}
+      {/* Fixed Period Selection Modal */}
       <Modal
         visible={showPeriodModal}
-        transparent
+        transparent={true}
         animationType="fade"
         onRequestClose={() => setShowPeriodModal(false)}
       >
         <TouchableOpacity 
           style={styles.modalOverlay}
           onPress={() => setShowPeriodModal(false)}
+          activeOpacity={1}
         >
           <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select Time Period</Text>
             {periods.map((period) => (
               <TouchableOpacity
-                key={period}
-                style={styles.modalOption}
-                onPress={() => {
-                  setTimePeriod(period);
-                  setShowPeriodModal(false);
-                }}
+                key={period.key}
+                style={[
+                  styles.modalOption,
+                  timePeriod === period.key && styles.modalOptionActive
+                ]}
+                onPress={() => handlePeriodSelect(period.key)}
+                activeOpacity={0.7}
               >
                 <Text style={[
                   styles.modalOptionText,
-                  timePeriod === period && styles.modalOptionTextActive
+                  timePeriod === period.key && styles.modalOptionTextActive
                 ]}>
-                  {periodLabels[period as keyof typeof periodLabels]}
+                  {period.label}
                 </Text>
+                {timePeriod === period.key && (
+                  <View style={styles.checkmark}>
+                    <Text style={styles.checkmarkText}>✓</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             ))}
           </View>
@@ -714,6 +729,14 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   periodText: {
     fontSize: 14,
@@ -961,28 +984,68 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 20,
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    minWidth: 200,
+    borderRadius: 16,
+    paddingVertical: 20,
+    paddingHorizontal: 0,
+    minWidth: 280,
+    maxWidth: 320,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1F2937',
+    textAlign: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 20,
   },
   modalOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  modalOptionActive: {
+    backgroundColor: '#F3F4F6',
   },
   modalOptionText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#1F2937',
-    textAlign: 'center',
+    flex: 1,
   },
   modalOptionTextActive: {
     color: '#8B5CF6',
     fontFamily: 'Inter-SemiBold',
+  },
+  checkmark: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#8B5CF6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkmarkText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
   },
 });
