@@ -240,6 +240,73 @@ class MoodService {
     }
   }
 
+  // Enhanced method for sentiment analysis with image data
+  async analyzeImageSentiment(imageBase64: string): Promise<{
+    emotion: string;
+    confidence: number;
+    details: any;
+  }> {
+    try {
+      // Simulate AI image analysis
+      // In production, this would call a real computer vision API
+      const emotions = ['Happy', 'Sad', 'Anxious', 'Neutral', 'Excited', 'Tired'];
+      const randomEmotion = emotions[Math.floor(Math.random() * emotions.length)];
+      const confidence = 0.7 + Math.random() * 0.25; // 70-95% confidence
+      
+      return {
+        emotion: randomEmotion,
+        confidence: Math.round(confidence * 100) / 100,
+        details: {
+          facialFeatures: {
+            eyeOpenness: Math.random(),
+            mouthCurvature: Math.random() * 2 - 1, // -1 to 1
+            browPosition: Math.random() * 2 - 1,
+          },
+          emotionScores: {
+            happiness: Math.random(),
+            sadness: Math.random(),
+            anxiety: Math.random(),
+            neutral: Math.random(),
+          },
+        },
+      };
+    } catch (error) {
+      console.error('Image sentiment analysis error:', error);
+      throw error;
+    }
+  }
+
+  // Create sentiment analysis record
+  async createSentimentAnalysis(data: {
+    detectedEmotion: string;
+    confidenceScore: number;
+    analysisResult: any;
+    imageUrl?: string;
+  }): Promise<any> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No authenticated user');
+
+      const { data: result, error } = await supabase
+        .from('sentiment_analyses')
+        .insert({
+          user_id: user.id,
+          detected_emotion: data.detectedEmotion,
+          confidence_score: data.confidenceScore,
+          analysis_result: data.analysisResult,
+          image_url: data.imageUrl || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return result;
+    } catch (error) {
+      console.error('Create sentiment analysis error:', error);
+      throw error;
+    }
+  }
+
   async getMoodAnalytics(days: number = 7): Promise<{
     averageMood: number;
     weeklyTrend: 'improving' | 'declining' | 'stable';
