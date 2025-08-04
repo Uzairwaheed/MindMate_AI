@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { ChevronLeft, Plus, TrendingUp, Calendar, Edit, Trash2, X, Check } from 'lucide-react-native';
+import { ChevronLeft, Plus, TrendingUp, Calendar, CreditCard as Edit, Trash2, X, Check } from 'lucide-react-native';
 import { moodService, ParsedMoodEntry, UpdateMoodEntryData } from '@/services/moodService';
 
 export default function MoodTrackingScreen() {
