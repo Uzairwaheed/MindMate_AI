@@ -1,540 +1,481 @@
-import { supabase } from '@/lib/supabase';
-import { Database } from '@/types/database';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { router } from 'expo-router';
+import { ChevronLeft, Calendar, Save, BookOpen } from 'lucide-react-native';
+import { journalService } from '@/services/journalService';
 
-type MoodEntry = Database['public']['Tables']['mood_entries']['Row'];
-type MoodEntryInsert = Database['public']['Tables']['mood_entries']['Insert'];
-type MoodEntryUpdate = Database['public']['Tables']['mood_entries']['Update'];
-type SentimentAnalysis = Database['public']['Tables']['sentiment_analyses']['Row'];
-type SentimentAnalysisInsert = Database['public']['Tables']['sentiment_analyses']['Insert'];
+export default function JournalScreen() {
+  const [journalEntry, setJournalEntry] = useState('');
+  const [moodRating, setMoodRating] = useState<number>(5);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [loading, setLoading] = useState(false);
+  const [recentEntries, setRecentEntries] = useState<any[]>([]);
 
-export interface CreateMoodEntryData {
-  moodScore: number;
-  energyLevel?: number;
-  anxietyLevel?: number;
-  stressLevel?: number;
-  sleepQuality?: number;
-  emotions?: string[];
-  notes?: string;
-  entryDate?: string;
-}
+  useEffect(() => {
+    loadRecentEntries();
+  }, []);
 
-export interface UpdateMoodEntryData {
-  moodScore?: number;
-  energyLevel?: number;
-  anxietyLevel?: number;
-  stressLevel?: number;
-  sleepQuality?: number;
-  emotions?: string[];
-  notes?: string;
-}
-
-export interface SentimentAnalysisData {
-  imageUrl?: string;
-  detectedEmotion: string;
-  confidenceScore?: number;
-  analysisResult?: any;
-}
-
-export interface MoodCalendarData {
-  date: string;
-  moodScore: number;
-  hasJournal: boolean;
-  emotions: string[];
-}
-
-export interface ParsedMoodEntry extends MoodEntry {
-  parsed: {
-    moodScore: number;
-    energyLevel: number;
-    anxietyLevel: number;
-    stressLevel: number;
-    sleepQuality: number;
-    userNotes: string;
+  const loadRecentEntries = async () => {
+    try {
+      const entries = await journalService.getUserEntries(5);
+      setRecentEntries(entries);
+    } catch (error) {
+      console.error('Failed to load recent entries:', error);
+    }
   };
-}
 
-class MoodService {
-  // Parse notes field to extract individual metrics
-  private parseNotesField(notes: string): {
-    moodScore: number;
-    energyLevel: number;
-    anxietyLevel: number;
-    stressLevel: number;
-    sleepQuality: number;
-    userNotes: string;
-  } {
-    const defaultValues = {
-      moodScore: 5,
-      energyLevel: 5,
-      anxietyLevel: 5,
-      stressLevel: 5,
-      sleepQuality: 5,
-      userNotes: '',
-    };
-
-    if (!notes) return defaultValues;
-
-    try {
-      // Extract values using regex patterns
-      const moodMatch = notes.match(/Mood:\s*(\d+)/);
-      const energyMatch = notes.match(/Energy:\s*(\d+)/);
-      const anxietyMatch = notes.match(/Anxiety:\s*(\d+)/);
-      const stressMatch = notes.match(/Stress:\s*(\d+)/);
-      const sleepMatch = notes.match(/Sleep:\s*(\d+)/);
-      
-      // Extract user notes (everything after the metrics)
-      const metricsEnd = notes.lastIndexOf('/10');
-      const userNotes = metricsEnd !== -1 ? notes.substring(metricsEnd + 4).trim() : notes;
-
-      return {
-        moodScore: moodMatch ? parseInt(moodMatch[1]) : defaultValues.moodScore,
-        energyLevel: energyMatch ? parseInt(energyMatch[1]) : defaultValues.energyLevel,
-        anxietyLevel: anxietyMatch ? parseInt(anxietyMatch[1]) : defaultValues.anxietyLevel,
-        stressLevel: stressMatch ? parseInt(stressMatch[1]) : defaultValues.stressLevel,
-        sleepQuality: sleepMatch ? parseInt(sleepMatch[1]) : defaultValues.sleepQuality,
-        userNotes: userNotes.startsWith('.') ? userNotes.substring(1).trim() : userNotes,
-      };
-    } catch (error) {
-      console.error('Error parsing notes field:', error);
-      return defaultValues;
-    }
-  }
-
-  // Format notes field with all metrics
-  private formatNotesField(data: CreateMoodEntryData | UpdateMoodEntryData): string {
-    const mood = data.moodScore || 5;
-    const energy = data.energyLevel || 5;
-    const anxiety = data.anxietyLevel || 5;
-    const stress = data.stressLevel || 5;
-    const sleep = data.sleepQuality || 5;
-    const userNotes = data.notes?.trim() || '';
-
-    let formattedNotes = `Mood: ${mood}/10, Energy: ${energy}/10, Anxiety: ${anxiety}/10, Stress: ${stress}/10, Sleep: ${sleep}/10`;
-    
-    if (userNotes) {
-      formattedNotes += `. ${userNotes}`;
+  const handleSaveEntry = async () => {
+    if (!journalEntry.trim()) {
+      Alert.alert('Empty Entry', 'Please write something in your journal entry.');
+      return;
     }
 
-    return formattedNotes;
-  }
-
-  // Create a mood entry
-  async createMoodEntry(entryData: CreateMoodEntryData): Promise<ParsedMoodEntry> {
+    setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
-
-      // Convert 1-10 scale to 1-5 scale for database constraint
-      const dbMoodScore = Math.max(1, Math.min(5, Math.ceil((entryData.moodScore || 5) / 2)));
-
-      const insertData: MoodEntryInsert = {
-        user_id: user.id,
-        mood_score: dbMoodScore,
-        emotions: entryData.emotions || [],
-        notes: this.formatNotesField(entryData),
-        entry_date: entryData.entryDate || new Date().toISOString().split('T')[0],
-      };
-
-      const { data, error } = await supabase
-        .from('mood_entries')
-        .insert(insertData)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Return parsed entry
-      return {
-        ...data,
-        parsed: this.parseNotesField(data.notes),
-      };
-    } catch (error) {
-      console.error('Create mood entry error:', error);
-      throw error;
-    }
-  }
-
-  // Update a mood entry
-  async updateMoodEntry(entryId: string, updates: UpdateMoodEntryData): Promise<ParsedMoodEntry> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
-
-      const updateData: MoodEntryUpdate = {};
-
-      // Update mood score if provided
-      if (updates.moodScore !== undefined) {
-        updateData.mood_score = Math.max(1, Math.min(5, Math.ceil(updates.moodScore / 2)));
-      }
-
-      // Update emotions if provided
-      if (updates.emotions !== undefined) {
-        updateData.emotions = updates.emotions;
-      }
-
-      // Update notes with all metrics if any metric is provided
-      if (Object.keys(updates).some(key => ['moodScore', 'energyLevel', 'anxietyLevel', 'stressLevel', 'sleepQuality', 'notes'].includes(key))) {
-        // Get current entry to merge with updates
-        const { data: currentEntry } = await supabase
-          .from('mood_entries')
-          .select('*')
-          .eq('id', entryId)
-          .eq('user_id', user.id)
-          .single();
-
-        if (currentEntry) {
-          const currentParsed = this.parseNotesField(currentEntry.notes);
-          const mergedData = {
-            moodScore: updates.moodScore ?? currentParsed.moodScore,
-            energyLevel: updates.energyLevel ?? currentParsed.energyLevel,
-            anxietyLevel: updates.anxietyLevel ?? currentParsed.anxietyLevel,
-            stressLevel: updates.stressLevel ?? currentParsed.stressLevel,
-            sleepQuality: updates.sleepQuality ?? currentParsed.sleepQuality,
-            notes: updates.notes ?? currentParsed.userNotes,
-          };
-          updateData.notes = this.formatNotesField(mergedData);
-        }
-      }
-
-      const { data, error } = await supabase
-        .from('mood_entries')
-        .update(updateData)
-        .eq('id', entryId)
-        .eq('user_id', user.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      return {
-        ...data,
-        parsed: this.parseNotesField(data.notes),
-      };
-    } catch (error) {
-      console.error('Update mood entry error:', error);
-      throw error;
-    }
-  }
-
-  // Delete a mood entry
-  async deleteMoodEntry(entryId: string): Promise<void> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
-
-      const { error } = await supabase
-        .from('mood_entries')
-        .delete()
-        .eq('id', entryId)
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-    } catch (error) {
-      console.error('Delete mood entry error:', error);
-      throw error;
-    }
-  }
-
-  // Get user's mood entries with parsed data
-  async getUserMoodEntries(limit?: number): Promise<ParsedMoodEntry[]> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
-
-      let query = supabase
-        .from('mood_entries')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('entry_date', { ascending: false });
-
-      if (limit) {
-        query = query.limit(limit);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-
-      return (data || []).map(entry => ({
-        ...entry,
-        parsed: this.parseNotesField(entry.notes),
-      }));
-    } catch (error) {
-      console.error('Get mood entries error:', error);
-      throw error;
-    }
-  }
-
-  // Get mood entries for date range
-  async getMoodEntriesByDateRange(startDate: string, endDate: string): Promise<ParsedMoodEntry[]> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
-
-      const { data, error } = await supabase
-        .from('mood_entries')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('entry_date', startDate)
-        .lte('entry_date', endDate)
-        .order('entry_date', { ascending: true });
-
-      if (error) throw error;
-
-      return (data || []).map(entry => ({
-        ...entry,
-        parsed: this.parseNotesField(entry.notes),
-      }));
-    } catch (error) {
-      console.error('Get mood entries by date range error:', error);
-      throw error;
-    }
-  }
-
-  // Get mood statistics with accurate calculations
-  async getMoodStatistics(): Promise<{
-    averageMood: number;
-    totalEntries: number;
-    streakDays: number;
-    mostCommonEmotion: string;
-    weeklyTrend: 'improving' | 'declining' | 'stable';
-  }> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
-
-      // Get last 14 days of entries for trend analysis
-      const fourteenDaysAgo = new Date();
-      fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-      const today = new Date().toISOString().split('T')[0];
-
-      const entries = await this.getMoodEntriesByDateRange(
-        fourteenDaysAgo.toISOString().split('T')[0],
-        today
-      );
-
-      if (entries.length === 0) {
-        return {
-          averageMood: 0,
-          totalEntries: 0,
-          streakDays: 0,
-          mostCommonEmotion: 'neutral',
-          weeklyTrend: 'stable',
-        };
-      }
-
-      // Calculate average mood from last 7 days
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      const recentEntries = entries.filter(entry => 
-        new Date(entry.entry_date) >= sevenDaysAgo
-      );
-
-      const averageMood = recentEntries.length > 0
-        ? recentEntries.reduce((sum, entry) => sum + entry.parsed.moodScore, 0) / recentEntries.length
-        : 0;
-
-      // Calculate trend (compare first half vs second half of last 14 days)
-      const firstHalf = entries.slice(0, Math.floor(entries.length / 2));
-      const secondHalf = entries.slice(Math.floor(entries.length / 2));
-
-      let weeklyTrend: 'improving' | 'declining' | 'stable' = 'stable';
-      
-      if (firstHalf.length > 0 && secondHalf.length > 0) {
-        const firstHalfAvg = firstHalf.reduce((sum, entry) => sum + entry.parsed.moodScore, 0) / firstHalf.length;
-        const secondHalfAvg = secondHalf.reduce((sum, entry) => sum + entry.parsed.moodScore, 0) / secondHalf.length;
-        const difference = secondHalfAvg - firstHalfAvg;
-
-        if (difference > 0.5) weeklyTrend = 'improving';
-        else if (difference < -0.5) weeklyTrend = 'declining';
-      }
-
-      // Calculate streak (consecutive days with entries)
-      let streakDays = 0;
-      let currentDate = new Date();
-      const entryDates = new Set(entries.map(entry => entry.entry_date));
-
-      while (entryDates.has(currentDate.toISOString().split('T')[0])) {
-        streakDays++;
-        currentDate.setDate(currentDate.getDate() - 1);
-      }
-
-      // Find most common emotion
-      const emotionCounts: { [key: string]: number } = {};
-      entries.forEach(entry => {
-        entry.emotions.forEach(emotion => {
-          emotionCounts[emotion] = (emotionCounts[emotion] || 0) + 1;
-        });
+      await journalService.createEntry({
+        content: journalEntry.trim(),
+        moodRating: moodRating,
+        entryDate: selectedDate.toISOString().split('T')[0],
       });
 
-      const mostCommonEmotion = Object.keys(emotionCounts).length > 0
-        ? Object.keys(emotionCounts).reduce((a, b) => 
-            emotionCounts[a] > emotionCounts[b] ? a : b
-          )
-        : 'neutral';
-
-      return {
-        averageMood: Math.round(averageMood * 10) / 10,
-        totalEntries: entries.length,
-        streakDays,
-        mostCommonEmotion,
-        weeklyTrend,
-      };
+      Alert.alert(
+        'Entry Saved',
+        'Your journal entry has been saved successfully!',
+        [{ text: 'OK', onPress: () => {
+          setJournalEntry('');
+          loadRecentEntries();
+        }}]
+      );
     } catch (error) {
-      console.error('Get mood statistics error:', error);
-      throw error;
+      Alert.alert('Error', 'Failed to save journal entry. Please try again.');
+    } finally {
+      setLoading(false);
     }
-  }
+  };
 
-  // Get mood calendar data
-  async getMoodCalendarData(year: number, month: number): Promise<MoodCalendarData[]> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
+  const getMoodEmoji = (rating: number) => {
+    if (rating <= 2) return '😢';
+    if (rating <= 4) return '😟';
+    if (rating <= 6) return '😐';
+    if (rating <= 8) return '🙂';
+    return '😊';
+  };
 
-      const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
-      const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <ChevronLeft size={24} color="#6B7280" />
+        </TouchableOpacity>
+        <View style={styles.headerContent}>
+          <Text style={styles.title}>Daily Journal</Text>
+          <Text style={styles.subtitle}>Express your thoughts and feelings</Text>
+        </View>
+      </View>
 
-      // Get mood entries for the month
-      const { data: moodEntries, error: moodError } = await supabase
-        .from('mood_entries')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('entry_date', startDate)
-        .lte('entry_date', endDate)
-        .order('entry_date', { ascending: true });
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <View style={styles.journalCard}>
+          <View style={styles.dateSection}>
+            <Text style={styles.dateLabel}>Date</Text>
+            <View style={styles.dateContainer}>
+              <Calendar size={16} color="#8B5CF6" />
+              <Text style={styles.dateText}>
+                {selectedDate.toLocaleDateString('en-US', { 
+                  month: '2-digit',
+                  day: '2-digit',
+                  year: 'numeric'
+                })}
+              </Text>
+            </View>
+          </View>
 
-      if (moodError) throw moodError;
+          <View style={styles.moodSection}>
+            <Text style={styles.moodLabel}>Mood Today</Text>
+            <View style={styles.moodContainer}>
+              <Text style={styles.moodEmoji}>{getMoodEmoji(moodRating)}</Text>
+              <View style={styles.sliderContainer}>
+                <View style={styles.slider}>
+                  <View 
+                    style={[
+                      styles.sliderTrack,
+                      { width: `${(moodRating / 10) * 100}%` }
+                    ]} 
+                  />
+                  <TouchableOpacity
+                    style={[
+                      styles.sliderThumb,
+                      { left: `${(moodRating / 10) * 100 - 2}%` }
+                    ]}
+                    onPressIn={(e) => {
+                      // Simple slider implementation
+                    }}
+                  />
+                </View>
+                <View style={styles.sliderLabels}>
+                  <Text style={styles.sliderLabel}>😢 Very Low</Text>
+                  <Text style={styles.sliderValue}>{moodRating}/10</Text>
+                  <Text style={styles.sliderLabel}>😊 Excellent</Text>
+                </View>
+              </View>
+            </View>
+          </View>
 
-      // Get journal entries for the month to check which days have journals
-      const { data: journalEntries, error: journalError } = await supabase
-        .from('journal_entries')
-        .select('entry_date')
-        .eq('user_id', user.id)
-        .gte('entry_date', startDate)
-        .lte('entry_date', endDate);
+          <View style={styles.journalSection}>
+            <Text style={styles.journalLabel}>What's on your mind?</Text>
+            <TextInput
+              style={styles.textArea}
+              value={journalEntry}
+              onChangeText={setJournalEntry}
+              placeholder="Write about your day, your feelings, your thoughts... There's no wrong way to journal."
+              placeholderTextColor="#9CA3AF"
+              multiline
+              textAlignVertical="top"
+              maxLength={1000}
+            />
+            <Text style={styles.characterCount}>
+              {journalEntry.length} characters • Your entries are private and secure
+            </Text>
+          </View>
 
-      if (journalError) throw journalError;
+          <TouchableOpacity 
+            style={[styles.saveButton, loading && styles.saveButtonDisabled]} 
+            onPress={handleSaveEntry}
+            disabled={loading}
+          >
+            <Save size={20} color="#FFFFFF" style={styles.saveIcon} />
+            <Text style={styles.saveButtonText}>
+              {loading ? 'Saving...' : 'Save Entry'}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-      const journalDates = new Set(journalEntries?.map(entry => entry.entry_date) || []);
+        <View style={styles.recentSection}>
+          <View style={styles.recentHeader}>
+            <BookOpen size={20} color="#6B7280" />
+            <Text style={styles.recentTitle}>Recent Entries</Text>
+          </View>
+          
+          {recentEntries.length > 0 ? (
+            recentEntries.map((entry, index) => (
+              <View key={entry.id} style={styles.recentEntry}>
+                <View style={styles.recentEntryHeader}>
+                  <Text style={styles.recentEntryDate}>
+                    {new Date(entry.entry_date).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit'
+                    })}
+                  </Text>
+                  <Text style={styles.recentEntryMood}>
+                    {getMoodEmoji(entry.mood_rating || 5)}
+                  </Text>
+                </View>
+                <Text style={styles.recentEntryContent} numberOfLines={2}>
+                  {entry.content}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No recent entries</Text>
+            </View>
+          )}
+        </View>
 
-      return (moodEntries || []).map(entry => ({
-        date: entry.entry_date,
-        moodScore: entry.mood_score,
-        hasJournal: journalDates.has(entry.entry_date),
-        emotions: entry.emotions,
-      }));
-    } catch (error) {
-      console.error('Get mood calendar data error:', error);
-      throw error;
-    }
-  }
-
-  // Get mood trends for the last N days
-  async getMoodTrends(days: number = 14): Promise<{ date: string; score: number }[]> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
-
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - days);
-
-      const { data, error } = await supabase
-        .from('mood_entries')
-        .select('entry_date, mood_score')
-        .eq('user_id', user.id)
-        .gte('entry_date', startDate.toISOString().split('T')[0])
-        .order('entry_date', { ascending: true });
-
-      if (error) throw error;
-
-      return (data || []).map(entry => ({
-        date: entry.entry_date,
-        score: entry.mood_score,
-      }));
-    } catch (error) {
-      console.error('Get mood trends error:', error);
-      throw error;
-    }
-  }
-
-  // Create sentiment analysis record
-  async createSentimentAnalysis(analysisData: SentimentAnalysisData): Promise<SentimentAnalysis> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
-
-      const insertData: SentimentAnalysisInsert = {
-        user_id: user.id,
-        image_url: analysisData.imageUrl || null,
-        detected_emotion: analysisData.detectedEmotion,
-        confidence_score: analysisData.confidenceScore || 0,
-        analysis_result: analysisData.analysisResult || {},
-      };
-
-      const { data, error } = await supabase
-        .from('sentiment_analyses')
-        .insert(insertData)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Create sentiment analysis error:', error);
-      throw error;
-    }
-  }
-
-  // Get recent sentiment analyses
-  async getRecentSentimentAnalyses(limit: number = 10): Promise<SentimentAnalysis[]> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
-
-      const { data, error } = await supabase
-        .from('sentiment_analyses')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(limit);
-
-      if (error) throw error;
-      return data || [];
-    } catch (error) {
-      console.error('Get sentiment analyses error:', error);
-      throw error;
-    }
-  }
-
-  // Analyze image sentiment (placeholder for AI service)
-  async analyzeImageSentiment(imageBase64: string): Promise<{
-    emotion: string;
-    confidence: number;
-    details: any;
-  }> {
-    try {
-      // This is a placeholder implementation
-      // In production, you would integrate with a real computer vision API
-      // like Google Cloud Vision, AWS Rekognition, or Azure Face API
-      
-      const emotions = ['Happy', 'Sad', 'Neutral', 'Anxious', 'Excited'];
-      const randomEmotion = emotions[Math.floor(Math.random() * emotions.length)];
-      const confidence = Math.random() * 0.4 + 0.6; // 60-100% confidence
-      
-      return {
-        emotion: randomEmotion,
-        confidence: Math.round(confidence * 100) / 100,
-        details: {
-          faceDetected: true,
-          imageQuality: 'good',
-          processingTime: Math.random() * 2 + 1,
-        },
-      };
-    } catch (error) {
-      console.error('Image sentiment analysis error:', error);
-      throw error;
-    }
-  }
+        <View style={styles.tipsSection}>
+          <View style={styles.tipsHeader}>
+            <View style={styles.tipsIcon}>
+              <Text style={styles.tipsIconText}>💡</Text>
+            </View>
+            <Text style={styles.tipsTitle}>Journaling Tips</Text>
+          </View>
+          <Text style={styles.tipText}>• Write freely without worrying about grammar or structure</Text>
+          <Text style={styles.tipText}>• Focus on how events made you feel, not just what happened</Text>
+          <Text style={styles.tipText}>• Try to write at the same time each day to build a habit</Text>
+        </View>
+      </ScrollView>
+    </View>
+  );
 }
 
-export const moodService = new MoodService();
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#E8F5E8',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 60,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+  },
+  backButton: {
+    padding: 8,
+    marginRight: 16,
+  },
+  headerContent: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 24,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  scrollView: {
+    flex: 1,
+    paddingHorizontal: 24,
+  },
+  journalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  dateSection: {
+    marginBottom: 24,
+  },
+  dateLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  dateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  dateText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#1F2937',
+    marginLeft: 8,
+  },
+  moodSection: {
+    marginBottom: 24,
+  },
+  moodLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  moodContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  moodEmoji: {
+    fontSize: 32,
+    marginRight: 16,
+  },
+  sliderContainer: {
+    flex: 1,
+  },
+  slider: {
+    height: 6,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+    position: 'relative',
+    marginBottom: 8,
+  },
+  sliderTrack: {
+    height: '100%',
+    backgroundColor: '#3B82F6',
+    borderRadius: 3,
+  },
+  sliderThumb: {
+    position: 'absolute',
+    top: -6,
+    width: 18,
+    height: 18,
+    backgroundColor: '#3B82F6',
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  sliderLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  sliderLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  sliderValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#3B82F6',
+  },
+  journalSection: {
+    marginBottom: 24,
+  },
+  journalLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  textArea: {
+    height: 120,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#1F2937',
+    lineHeight: 24,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 8,
+  },
+  characterCount: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+  },
+  saveButton: {
+    flexDirection: 'row',
+    backgroundColor: '#10B981',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveIcon: {
+    marginRight: 8,
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  recentSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  recentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  recentTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1F2937',
+    marginLeft: 8,
+  },
+  recentEntry: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  recentEntryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  recentEntryDate: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#1F2937',
+  },
+  recentEntryMood: {
+    fontSize: 20,
+  },
+  recentEntryContent: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 20,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+  },
+  tipsSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 40,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  tipsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  tipsIcon: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  tipsIconText: {
+    fontSize: 16,
+  },
+  tipsTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1F2937',
+  },
+  tipText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 20,
+    marginBottom: 6,
+  },
+});
