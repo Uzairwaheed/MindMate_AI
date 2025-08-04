@@ -59,15 +59,6 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="sleep"
-        options={{
-          title: 'Sleep',
-          tabBarIcon: ({ size, color }) => (
-            <Moon size={size} color={color} />
-          ),
-        }}
-      />
     </Tabs>
   );
 }
