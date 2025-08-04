@@ -163,7 +163,7 @@ export default function SleepScreen() {
                 </Text>
               </View>
               <View style={styles.correlationStat}>
-                <Text style={styles.correlationLabel}>< 7 Hours Sleep</Text>
+                <Text style={styles.correlationLabel}>{"< 7 Hours Sleep"}</Text>
                 <Text style={[styles.correlationValue, { color: '#EF4444' }]}>
                   {analytics.moodCorrelation.averageMoodWithLess7}/10 mood
                 </Text>
