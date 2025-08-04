@@ -222,6 +222,47 @@ export interface Database {
           created_at?: string;
         };
       };
+      sleep_entries: {
+        Row: {
+          id: string;
+          user_id: string;
+          bedtime: string;
+          wake_time: string;
+          sleep_duration: number;
+          sleep_quality: number;
+          mood_after_sleep: string;
+          notes: string;
+          entry_date: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          bedtime: string;
+          wake_time: string;
+          sleep_duration: number;
+          sleep_quality: number;
+          mood_after_sleep: string;
+          notes?: string;
+          entry_date?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          bedtime?: string;
+          wake_time?: string;
+          sleep_duration?: number;
+          sleep_quality?: number;
+          mood_after_sleep?: string;
+          notes?: string;
+          entry_date?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
     Views: {
       [_ in never]: never;

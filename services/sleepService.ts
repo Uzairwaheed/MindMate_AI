@@ -1,26 +1,17 @@
 import { supabase } from '@/lib/supabase';
 import { Database } from '@/types/database';
 
+type SleepEntry = Database['public']['Tables']['sleep_entries']['Row'];
+type SleepEntryInsert = Database['public']['Tables']['sleep_entries']['Insert'];
+type SleepEntryUpdate = Database['public']['Tables']['sleep_entries']['Update'];
+
 export interface CreateSleepEntryData {
   bedtime: string; // HH:MM format
   wakeTime: string; // HH:MM format
-  sleepQuality: number; // 1-5 scale
+  sleepQuality: number; // 1-10 scale
   moodAfterSleep: string;
   notes?: string;
   entryDate?: string;
-}
-
-export interface SleepEntry {
-  id: string;
-  user_id: string;
-  bedtime: string;
-  wake_time: string;
-  sleep_duration: number; // in hours
-  sleep_quality: number;
-  mood_after_sleep: string;
-  notes: string;
-  entry_date: string;
-  created_at: string;
 }
 
 export interface SleepAnalytics {
@@ -29,6 +20,20 @@ export interface SleepAnalytics {
   consistency: number;
   totalEntries: number;
   insights: string[];
+  moodCorrelation?: {
+    averageMoodWith7Plus: number;
+    averageMoodWithLess7: number;
+    correlation: 'positive' | 'negative' | 'neutral';
+  };
+}
+
+export interface SleepChartData {
+  date: Date;
+  duration: number | null;
+  quality: number | null;
+  bedtime: string | null;
+  wakeTime: string | null;
+  mood?: number | null;
 }
 
 class SleepService {
@@ -46,7 +51,7 @@ class SleepService {
     }
     
     const durationMinutes = wakeTimeMinutes - bedTimeMinutes;
-    return Math.round((durationMinutes / 60) * 10) / 10; // Round to 1 decimal
+    return Math.round((durationMinutes / 60) * 100) / 100; // Round to 2 decimals
   }
 
   // Create a new sleep entry
@@ -57,71 +62,29 @@ class SleepService {
 
       const duration = this.calculateDuration(entryData.bedtime, entryData.wakeTime);
 
-      // Store in mood_entries table with formatted notes
-      const formattedNotes = `Sleep: ${entryData.bedtime}-${entryData.wakeTime} | Quality: ${entryData.sleepQuality} | Mood: ${entryData.moodAfterSleep}${entryData.notes ? ` | Notes: ${entryData.notes}` : ''}`;
-
-      const { data, error } = await supabase
-        .from('mood_entries')
-        .insert({
-          user_id: user.id,
-          mood_score: Math.ceil(entryData.sleepQuality), // Use quality as mood score
-          emotions: ['Sleep'],
-          notes: formattedNotes,
-          entry_date: entryData.entryDate || new Date().toISOString().split('T')[0],
-          entry_time: entryData.wakeTime,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Return formatted sleep entry
-      return {
-        id: data.id,
-        user_id: data.user_id,
+      const insertData: SleepEntryInsert = {
+        user_id: user.id,
         bedtime: entryData.bedtime,
         wake_time: entryData.wakeTime,
         sleep_duration: duration,
         sleep_quality: entryData.sleepQuality,
         mood_after_sleep: entryData.moodAfterSleep,
         notes: entryData.notes || '',
-        entry_date: data.entry_date,
-        created_at: data.created_at,
+        entry_date: entryData.entryDate || new Date().toISOString().split('T')[0],
       };
+
+      const { data, error } = await supabase
+        .from('sleep_entries')
+        .insert(insertData)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
     } catch (error) {
       console.error('Create sleep entry error:', error);
       throw error;
     }
-  }
-
-  // Parse sleep data from mood_entries
-  private parseSleepEntry(moodEntry: any): SleepEntry | null {
-    if (!moodEntry.emotions.includes('Sleep')) return null;
-
-    const notes = moodEntry.notes || '';
-    const sleepMatch = notes.match(/Sleep:\s*(\d{1,2}:\d{2})-(\d{1,2}:\d{2})/);
-    const qualityMatch = notes.match(/Quality:\s*(\d+)/);
-    const moodMatch = notes.match(/Mood:\s*([^|]+)/);
-    const notesMatch = notes.match(/Notes:\s*(.+?)(?:\s*\||$)/);
-
-    if (!sleepMatch) return null;
-
-    const bedtime = sleepMatch[1];
-    const wakeTime = sleepMatch[2];
-    const duration = this.calculateDuration(bedtime, wakeTime);
-
-    return {
-      id: moodEntry.id,
-      user_id: moodEntry.user_id,
-      bedtime,
-      wake_time: wakeTime,
-      sleep_duration: duration,
-      sleep_quality: qualityMatch ? parseInt(qualityMatch[1]) : moodEntry.mood_score,
-      mood_after_sleep: moodMatch ? moodMatch[1].trim() : 'Good',
-      notes: notesMatch ? notesMatch[1].trim() : '',
-      entry_date: moodEntry.entry_date,
-      created_at: moodEntry.created_at,
-    };
   }
 
   // Get user's sleep entries
@@ -131,10 +94,9 @@ class SleepService {
       if (!user) throw new Error('No authenticated user');
 
       let query = supabase
-        .from('mood_entries')
+        .from('sleep_entries')
         .select('*')
         .eq('user_id', user.id)
-        .contains('emotions', ['Sleep'])
         .order('entry_date', { ascending: false });
 
       if (limit) {
@@ -144,11 +106,110 @@ class SleepService {
       const { data, error } = await query;
       if (error) throw error;
 
-      return (data || [])
-        .map(entry => this.parseSleepEntry(entry))
-        .filter((entry): entry is SleepEntry => entry !== null);
+      return data || [];
     } catch (error) {
       console.error('Get sleep entries error:', error);
+      throw error;
+    }
+  }
+
+  // Get sleep entries for date range
+  async getSleepEntriesByDateRange(startDate: string, endDate: string): Promise<SleepEntry[]> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No authenticated user');
+
+      const { data, error } = await supabase
+        .from('sleep_entries')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('entry_date', startDate)
+        .lte('entry_date', endDate)
+        .order('entry_date', { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Get sleep entries by date range error:', error);
+      throw error;
+    }
+  }
+
+  // Update sleep entry
+  async updateSleepEntry(entryId: string, updateData: Partial<CreateSleepEntryData>): Promise<SleepEntry> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No authenticated user');
+
+      const updatePayload: SleepEntryUpdate = {};
+
+      if (updateData.bedtime) updatePayload.bedtime = updateData.bedtime;
+      if (updateData.wakeTime) updatePayload.wake_time = updateData.wakeTime;
+      if (updateData.sleepQuality) updatePayload.sleep_quality = updateData.sleepQuality;
+      if (updateData.moodAfterSleep) updatePayload.mood_after_sleep = updateData.moodAfterSleep;
+      if (updateData.notes !== undefined) updatePayload.notes = updateData.notes;
+      if (updateData.entryDate) updatePayload.entry_date = updateData.entryDate;
+
+      // Recalculate duration if times changed
+      if (updateData.bedtime || updateData.wakeTime) {
+        const currentEntry = await this.getSleepEntry(entryId);
+        const bedtime = updateData.bedtime || currentEntry.bedtime;
+        const wakeTime = updateData.wakeTime || currentEntry.wake_time;
+        updatePayload.sleep_duration = this.calculateDuration(bedtime, wakeTime);
+      }
+
+      const { data, error } = await supabase
+        .from('sleep_entries')
+        .update(updatePayload)
+        .eq('id', entryId)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Update sleep entry error:', error);
+      throw error;
+    }
+  }
+
+  // Get single sleep entry
+  async getSleepEntry(entryId: string): Promise<SleepEntry> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No authenticated user');
+
+      const { data, error } = await supabase
+        .from('sleep_entries')
+        .select('*')
+        .eq('id', entryId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Get sleep entry error:', error);
+      throw error;
+    }
+  }
+
+  // Delete sleep entry
+  async deleteSleepEntry(entryId: string): Promise<void> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No authenticated user');
+
+      const { error } = await supabase
+        .from('sleep_entries')
+        .delete()
+        .eq('id', entryId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Delete sleep entry error:', error);
       throw error;
     }
   }
@@ -156,8 +217,15 @@ class SleepService {
   // Get sleep analytics
   async getSleepAnalytics(days: number = 7): Promise<SleepAnalytics> {
     try {
-      const entries = await this.getUserSleepEntries();
-      
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(endDate.getDate() - days);
+
+      const entries = await this.getSleepEntriesByDateRange(
+        startDate.toISOString().split('T')[0],
+        endDate.toISOString().split('T')[0]
+      );
+
       if (entries.length === 0) {
         return {
           weeklyAverage: 0,
@@ -168,43 +236,30 @@ class SleepService {
         };
       }
 
-      // Filter entries for the specified period
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - days);
-      const recentEntries = entries.filter(entry => 
-        new Date(entry.entry_date) >= cutoffDate
-      );
-
-      if (recentEntries.length === 0) {
-        return {
-          weeklyAverage: 0,
-          qualityAverage: 0,
-          consistency: 0,
-          totalEntries: entries.length,
-          insights: ['No recent sleep data. Log your sleep to see trends!'],
-        };
-      }
-
       // Calculate averages
-      const weeklyAverage = recentEntries.reduce((sum, entry) => sum + entry.sleep_duration, 0) / recentEntries.length;
-      const qualityAverage = recentEntries.reduce((sum, entry) => sum + entry.sleep_quality, 0) / recentEntries.length;
+      const weeklyAverage = entries.reduce((sum, entry) => sum + entry.sleep_duration, 0) / entries.length;
+      const qualityAverage = entries.reduce((sum, entry) => sum + entry.sleep_quality, 0) / entries.length;
 
       // Calculate consistency (lower variance = higher consistency)
-      const avgBedtime = this.calculateAverageTime(recentEntries.map(e => e.bedtime));
-      const avgWakeTime = this.calculateAverageTime(recentEntries.map(e => e.wake_time));
-      const bedtimeVariance = this.calculateTimeVariance(recentEntries.map(e => e.bedtime), avgBedtime);
-      const wakeTimeVariance = this.calculateTimeVariance(recentEntries.map(e => e.wake_time), avgWakeTime);
+      const avgBedtime = this.calculateAverageTime(entries.map(e => e.bedtime));
+      const avgWakeTime = this.calculateAverageTime(entries.map(e => e.wake_time));
+      const bedtimeVariance = this.calculateTimeVariance(entries.map(e => e.bedtime), avgBedtime);
+      const wakeTimeVariance = this.calculateTimeVariance(entries.map(e => e.wake_time), avgWakeTime);
       const consistency = Math.max(0, 100 - (bedtimeVariance + wakeTimeVariance) * 10);
 
+      // Get mood correlation if mood data exists
+      const moodCorrelation = await this.getMoodSleepCorrelation(entries);
+
       // Generate insights
-      const insights = this.generateInsights(recentEntries, weeklyAverage, qualityAverage);
+      const insights = this.generateInsights(entries, weeklyAverage, qualityAverage, moodCorrelation);
 
       return {
-        weeklyAverage: Math.round(weeklyAverage * 10) / 10,
+        weeklyAverage: Math.round(weeklyAverage * 100) / 100,
         qualityAverage: Math.round(qualityAverage * 10) / 10,
         consistency: Math.round(consistency),
         totalEntries: entries.length,
         insights,
+        moodCorrelation,
       };
     } catch (error) {
       console.error('Get sleep analytics error:', error);
@@ -219,23 +274,37 @@ class SleepService {
   }
 
   // Get chart data for visualization
-  async getChartData(days: number = 7): Promise<Array<{
-    date: Date;
-    duration: number | null;
-    quality: number | null;
-    bedtime: string | null;
-    wakeTime: string | null;
-  }>> {
+  async getChartData(days: number = 7): Promise<SleepChartData[]> {
     try {
-      const entries = await this.getUserSleepEntries();
-      const chartPoints = [];
+      const chartPoints: SleepChartData[] = [];
 
       for (let i = days - 1; i >= 0; i--) {
         const date = new Date();
         date.setDate(date.getDate() - i);
         const dateStr = date.toISOString().split('T')[0];
         
-        const sleepEntry = entries.find(e => e.entry_date === dateStr);
+        const entries = await this.getSleepEntriesByDateRange(dateStr, dateStr);
+        const sleepEntry = entries[0] || null;
+        
+        // Get mood data for correlation
+        let moodScore = null;
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: moodEntries } = await supabase
+              .from('mood_entries')
+              .select('mood_score')
+              .eq('user_id', user.id)
+              .eq('entry_date', dateStr)
+              .limit(1);
+            
+            if (moodEntries && moodEntries.length > 0) {
+              moodScore = moodEntries[0].mood_score * 2; // Convert 1-5 to 1-10 scale
+            }
+          }
+        } catch (error) {
+          // Mood data is optional, continue without it
+        }
         
         chartPoints.push({
           date: date,
@@ -243,6 +312,7 @@ class SleepService {
           quality: sleepEntry?.sleep_quality || null,
           bedtime: sleepEntry?.bedtime || null,
           wakeTime: sleepEntry?.wake_time || null,
+          mood: moodScore,
         });
       }
 
@@ -250,6 +320,58 @@ class SleepService {
     } catch (error) {
       console.error('Get chart data error:', error);
       return [];
+    }
+  }
+
+  // Get mood-sleep correlation
+  private async getMoodSleepCorrelation(sleepEntries: SleepEntry[]) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return undefined;
+
+      // Get mood entries for the same dates
+      const dates = sleepEntries.map(e => e.entry_date);
+      const { data: moodEntries } = await supabase
+        .from('mood_entries')
+        .select('mood_score, entry_date')
+        .eq('user_id', user.id)
+        .in('entry_date', dates);
+
+      if (!moodEntries || moodEntries.length < 3) return undefined;
+
+      // Calculate correlation
+      const sleepWith7Plus = sleepEntries.filter(e => e.sleep_duration >= 7);
+      const sleepWithLess7 = sleepEntries.filter(e => e.sleep_duration < 7);
+
+      const moodWith7Plus = moodEntries.filter(m => {
+        const sleepEntry = sleepEntries.find(s => s.entry_date === m.entry_date);
+        return sleepEntry && sleepEntry.sleep_duration >= 7;
+      });
+
+      const moodWithLess7 = moodEntries.filter(m => {
+        const sleepEntry = sleepEntries.find(s => s.entry_date === m.entry_date);
+        return sleepEntry && sleepEntry.sleep_duration < 7;
+      });
+
+      if (moodWith7Plus.length === 0 || moodWithLess7.length === 0) return undefined;
+
+      const avgMoodWith7Plus = moodWith7Plus.reduce((sum, m) => sum + m.mood_score * 2, 0) / moodWith7Plus.length;
+      const avgMoodWithLess7 = moodWithLess7.reduce((sum, m) => sum + m.mood_score * 2, 0) / moodWithLess7.length;
+
+      const difference = avgMoodWith7Plus - avgMoodWithLess7;
+      let correlation: 'positive' | 'negative' | 'neutral' = 'neutral';
+      
+      if (difference > 0.5) correlation = 'positive';
+      else if (difference < -0.5) correlation = 'negative';
+
+      return {
+        averageMoodWith7Plus: Math.round(avgMoodWith7Plus * 10) / 10,
+        averageMoodWithLess7: Math.round(avgMoodWithLess7 * 10) / 10,
+        correlation,
+      };
+    } catch (error) {
+      console.error('Get mood correlation error:', error);
+      return undefined;
     }
   }
 
@@ -281,9 +403,15 @@ class SleepService {
     return variance / 60; // Convert to hours
   }
 
-  private generateInsights(entries: SleepEntry[], avgDuration: number, avgQuality: number): string[] {
+  private generateInsights(
+    entries: SleepEntry[], 
+    avgDuration: number, 
+    avgQuality: number,
+    moodCorrelation?: any
+  ): string[] {
     const insights = [];
     
+    // Duration insights
     if (avgDuration < 7) {
       insights.push('You might benefit from getting more sleep. Aim for 7-9 hours per night.');
     } else if (avgDuration > 9) {
@@ -292,9 +420,10 @@ class SleepService {
       insights.push('Great job maintaining a healthy sleep duration!');
     }
 
-    if (avgQuality < 3) {
+    // Quality insights
+    if (avgQuality < 5) {
       insights.push('Your sleep quality could be improved. Consider a consistent bedtime routine.');
-    } else if (avgQuality >= 4) {
+    } else if (avgQuality >= 7) {
       insights.push('Excellent sleep quality! Keep up the good habits.');
     }
 
@@ -322,89 +451,37 @@ class SleepService {
       }
     }
 
+    // Mood correlation insights
+    if (moodCorrelation && moodCorrelation.correlation === 'positive') {
+      insights.push('Your mood is better when you get 7+ hours of sleep. Prioritize adequate rest!');
+    } else if (moodCorrelation && moodCorrelation.correlation === 'negative') {
+      insights.push('Interestingly, your mood doesn\'t seem directly tied to sleep duration. Other factors may be at play.');
+    }
+
     return insights;
   }
 
-  // Update sleep entry
-  async updateSleepEntry(entryId: string, updateData: Partial<CreateSleepEntryData>): Promise<SleepEntry> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
-
-      // Get current entry to merge data
-      const { data: currentEntry, error: fetchError } = await supabase
-        .from('mood_entries')
-        .select('*')
-        .eq('id', entryId)
-        .eq('user_id', user.id)
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      const currentSleep = this.parseSleepEntry(currentEntry);
-      if (!currentSleep) throw new Error('Entry is not a sleep entry');
-
-      // Merge update data with current data
-      const mergedData = {
-        bedtime: updateData.bedtime || currentSleep.bedtime,
-        wakeTime: updateData.wakeTime || currentSleep.wake_time,
-        sleepQuality: updateData.sleepQuality || currentSleep.sleep_quality,
-        moodAfterSleep: updateData.moodAfterSleep || currentSleep.mood_after_sleep,
-        notes: updateData.notes !== undefined ? updateData.notes : currentSleep.notes,
-      };
-
-      const duration = this.calculateDuration(mergedData.bedtime, mergedData.wakeTime);
-      const formattedNotes = `Sleep: ${mergedData.bedtime}-${mergedData.wakeTime} | Quality: ${mergedData.sleepQuality} | Mood: ${mergedData.moodAfterSleep}${mergedData.notes ? ` | Notes: ${mergedData.notes}` : ''}`;
-
-      const { data, error } = await supabase
-        .from('mood_entries')
-        .update({
-          mood_score: Math.ceil(mergedData.sleepQuality),
-          notes: formattedNotes,
-          entry_time: mergedData.wakeTime,
-        })
-        .eq('id', entryId)
-        .eq('user_id', user.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      return {
-        id: data.id,
-        user_id: data.user_id,
-        bedtime: mergedData.bedtime,
-        wake_time: mergedData.wakeTime,
-        sleep_duration: duration,
-        sleep_quality: mergedData.sleepQuality,
-        mood_after_sleep: mergedData.moodAfterSleep,
-        notes: mergedData.notes,
-        entry_date: data.entry_date,
-        created_at: data.created_at,
-      };
-    } catch (error) {
-      console.error('Update sleep entry error:', error);
-      throw error;
-    }
+  // Format duration for display
+  formatDuration(hours: number): string {
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    return `${h}h ${m}m`;
   }
 
-  // Delete sleep entry
-  async deleteSleepEntry(entryId: string): Promise<void> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
+  // Get quality text
+  getQualityText(quality: number): string {
+    if (quality <= 2) return 'Poor';
+    if (quality <= 4) return 'Fair';
+    if (quality <= 6) return 'Good';
+    if (quality <= 8) return 'Very Good';
+    return 'Excellent';
+  }
 
-      const { error } = await supabase
-        .from('mood_entries')
-        .delete()
-        .eq('id', entryId)
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-    } catch (error) {
-      console.error('Delete sleep entry error:', error);
-      throw error;
-    }
+  // Get quality color
+  getQualityColor(quality: number): string {
+    if (quality <= 3) return '#EF4444';
+    if (quality <= 6) return '#F59E0B';
+    return '#10B981';
   }
 }
 

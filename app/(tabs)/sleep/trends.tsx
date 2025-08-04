@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { ChevronLeft, TrendingUp, Clock, Star, Calendar } from 'lucide-react-native';
-import { sleepService, SleepEntry, SleepAnalytics } from '@/services/sleepService';
+import { ChevronLeft, TrendingUp, Clock, Star, Calendar, Heart } from 'lucide-react-native';
+import { sleepService, SleepAnalytics, SleepChartData } from '@/services/sleepService';
 
 export default function SleepTrendsScreen() {
   const [analytics, setAnalytics] = useState<SleepAnalytics>({
@@ -13,7 +13,7 @@ export default function SleepTrendsScreen() {
     totalEntries: 0,
     insights: [],
   });
-  const [chartData, setChartData] = useState<any[]>([]);
+  const [chartData, setChartData] = useState<SleepChartData[]>([]);
   const [viewPeriod, setViewPeriod] = useState<7 | 30>(7);
   const [loading, setLoading] = useState(true);
 
@@ -23,24 +23,18 @@ export default function SleepTrendsScreen() {
 
   const loadSleepTrends = async () => {
     try {
-      const [analyticsData, chartData] = await Promise.all([
+      const [analyticsData, chartDataResult] = await Promise.all([
         sleepService.getSleepAnalytics(viewPeriod),
         sleepService.getChartData(viewPeriod)
       ]);
       
       setAnalytics(analyticsData);
-      setChartData(chartData);
+      setChartData(chartDataResult);
     } catch (error) {
       console.error('Failed to load sleep trends:', error);
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatDuration = (hours: number): string => {
-    const h = Math.floor(hours);
-    const m = Math.round((hours - h) * 60);
-    return `${h}h ${m}m`;
   };
 
   const renderDurationChart = () => {
@@ -61,27 +55,47 @@ export default function SleepTrendsScreen() {
           <View style={styles.chartBars}>
             {chartData.map((point, index) => {
               const height = point.duration ? (point.duration / maxDuration) * 100 : 0;
+              const color = point.duration 
+                ? (point.duration >= 7 ? '#10B981' : point.duration >= 6 ? '#F59E0B' : '#EF4444')
+                : '#374151';
+              
               return (
                 <View key={index} style={styles.chartBarContainer}>
                   <View style={styles.chartBarBackground}>
                     <View 
                       style={[
                         styles.chartBar,
-                        { 
-                          height: `${height}%`,
-                          backgroundColor: point.duration 
-                            ? (point.duration >= 7 ? '#10B981' : point.duration >= 6 ? '#F59E0B' : '#EF4444')
-                            : '#374151'
-                        }
+                        { height: `${height}%`, backgroundColor: color }
                       ]} 
                     />
                   </View>
                   <Text style={styles.chartBarLabel}>
                     {point.date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}
                   </Text>
+                  {point.duration && (
+                    <Text style={styles.chartBarValue}>
+                      {sleepService.formatDuration(point.duration)}
+                    </Text>
+                  )}
                 </View>
               );
             })}
+          </View>
+        </View>
+        
+        {/* Legend */}
+        <View style={styles.chartLegend}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+            <Text style={styles.legendText}>7+ hours (Good)</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
+            <Text style={styles.legendText}>6-7 hours (Fair)</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
+            <Text style={styles.legendText}>< 6 hours (Poor)</Text>
           </View>
         </View>
       </View>
@@ -95,18 +109,22 @@ export default function SleepTrendsScreen() {
         <View style={styles.qualityChartArea}>
           {chartData.map((point, index) => {
             const quality = point.quality || 0;
+            const color = sleepService.getQualityColor(quality);
+            
             return (
               <View key={index} style={styles.qualityPoint}>
-                <View style={styles.qualityStars}>
-                  {[1, 2, 3, 4, 5].map(star => (
-                    <Star
-                      key={star}
-                      size={12}
-                      color={star <= quality ? '#F59E0B' : '#6B7280'}
-                      fill={star <= quality ? '#F59E0B' : 'transparent'}
-                    />
-                  ))}
+                <View style={styles.qualityBar}>
+                  <View 
+                    style={[
+                      styles.qualityBarFill,
+                      { 
+                        height: `${(quality / 10) * 100}%`,
+                        backgroundColor: color
+                      }
+                    ]} 
+                  />
                 </View>
+                <Text style={styles.qualityValue}>{quality || 0}</Text>
                 <Text style={styles.qualityDate}>
                   {point.date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}
                 </Text>
@@ -114,6 +132,57 @@ export default function SleepTrendsScreen() {
             );
           })}
         </View>
+      </View>
+    );
+  };
+
+  const renderMoodCorrelationChart = () => {
+    if (!analytics.moodCorrelation) return null;
+
+    const { averageMoodWith7Plus, averageMoodWithLess7, correlation } = analytics.moodCorrelation;
+    
+    return (
+      <View style={styles.chartContainer}>
+        <Text style={styles.chartTitle}>Sleep vs Mood Correlation</Text>
+        <View style={styles.correlationArea}>
+          <View style={styles.correlationBar}>
+            <Text style={styles.correlationLabel}>7+ Hours Sleep</Text>
+            <View style={styles.correlationBarContainer}>
+              <View 
+                style={[
+                  styles.correlationBarFill,
+                  { 
+                    width: `${(averageMoodWith7Plus / 10) * 100}%`,
+                    backgroundColor: '#10B981'
+                  }
+                ]} 
+              />
+            </View>
+            <Text style={styles.correlationValue}>{averageMoodWith7Plus}/10</Text>
+          </View>
+          
+          <View style={styles.correlationBar}>
+            <Text style={styles.correlationLabel}>< 7 Hours Sleep</Text>
+            <View style={styles.correlationBarContainer}>
+              <View 
+                style={[
+                  styles.correlationBarFill,
+                  { 
+                    width: `${(averageMoodWithLess7 / 10) * 100}%`,
+                    backgroundColor: '#EF4444'
+                  }
+                ]} 
+              />
+            </View>
+            <Text style={styles.correlationValue}>{averageMoodWithLess7}/10</Text>
+          </View>
+        </View>
+        
+        <Text style={styles.correlationInsight}>
+          {correlation === 'positive' && '✅ Better sleep improves your mood'}
+          {correlation === 'negative' && '⚠️ Sleep duration doesn\'t seem to affect your mood'}
+          {correlation === 'neutral' && '➡️ No clear correlation between sleep and mood yet'}
+        </Text>
       </View>
     );
   };
@@ -142,6 +211,11 @@ export default function SleepTrendsScreen() {
               </Text>
             </View>
           ))}
+        </View>
+        <View style={styles.consistencyScore}>
+          <Text style={styles.consistencyScoreText}>
+            Consistency Score: {analytics.consistency}%
+          </Text>
         </View>
       </View>
     );
@@ -189,7 +263,7 @@ export default function SleepTrendsScreen() {
           <View style={styles.statCard}>
             <Clock size={24} color="#8B5CF6" />
             <Text style={styles.statValue}>
-              {loading ? '...' : formatDuration(analytics.weeklyAverage)}
+              {loading ? '...' : sleepService.formatDuration(analytics.weeklyAverage)}
             </Text>
             <Text style={styles.statLabel}>Average Sleep</Text>
           </View>
@@ -197,7 +271,7 @@ export default function SleepTrendsScreen() {
           <View style={styles.statCard}>
             <Star size={24} color="#F59E0B" />
             <Text style={styles.statValue}>
-              {loading ? '...' : `${analytics.qualityAverage}/5`}
+              {loading ? '...' : `${analytics.qualityAverage}/10`}
             </Text>
             <Text style={styles.statLabel}>Avg Quality</Text>
           </View>
@@ -214,11 +288,12 @@ export default function SleepTrendsScreen() {
         {/* Charts */}
         {renderDurationChart()}
         {renderQualityChart()}
+        {renderMoodCorrelationChart()}
         {renderConsistencyChart()}
 
         {/* Insights */}
         <View style={styles.insightsCard}>
-          <Text style={styles.insightsTitle}>Sleep Insights</Text>
+          <Text style={styles.insightsTitle}>📊 Sleep Insights</Text>
           {analytics.insights.map((insight, index) => (
             <Text key={index} style={styles.insightText}>• {insight}</Text>
           ))}
@@ -226,7 +301,7 @@ export default function SleepTrendsScreen() {
 
         {/* Recommendations */}
         <View style={styles.recommendationsCard}>
-          <Text style={styles.recommendationsTitle}>Recommendations</Text>
+          <Text style={styles.recommendationsTitle}>💡 Recommendations</Text>
           <Text style={styles.recommendationText}>
             • Aim for 7-9 hours of sleep per night
           </Text>
@@ -238,6 +313,9 @@ export default function SleepTrendsScreen() {
           </Text>
           <Text style={styles.recommendationText}>
             • Avoid screens 1 hour before bed
+          </Text>
+          <Text style={styles.recommendationText}>
+            • Keep your bedroom cool, dark, and quiet
           </Text>
         </View>
       </ScrollView>
@@ -314,7 +392,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statValue: {
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#E5E7EB',
     marginVertical: 8,
@@ -341,6 +419,7 @@ const styles = StyleSheet.create({
   chartArea: {
     flexDirection: 'row',
     height: 120,
+    marginBottom: 12,
   },
   yAxis: {
     width: 30,
@@ -369,7 +448,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 8,
     justifyContent: 'flex-end',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   chartBar: {
     width: '100%',
@@ -381,28 +460,116 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#9CA3AF',
     textAlign: 'center',
+    marginBottom: 2,
+  },
+  chartBarValue: {
+    fontSize: 9,
+    fontFamily: 'Inter-Medium',
+    color: '#D1D5DB',
+    textAlign: 'center',
+  },
+  chartLegend: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  legendText: {
+    fontSize: 10,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
   },
   qualityChartArea: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    alignItems: 'center',
+    alignItems: 'flex-end',
+    height: 100,
+    marginBottom: 12,
   },
   qualityPoint: {
     alignItems: 'center',
     flex: 1,
   },
-  qualityStars: {
-    flexDirection: 'row',
-    marginBottom: 8,
+  qualityBar: {
+    width: 16,
+    height: 80,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+    justifyContent: 'flex-end',
+    marginBottom: 4,
+  },
+  qualityBarFill: {
+    width: '100%',
+    borderRadius: 8,
+    minHeight: 4,
+  },
+  qualityValue: {
+    fontSize: 10,
+    fontFamily: 'Inter-SemiBold',
+    color: '#E5E7EB',
+    marginBottom: 2,
   },
   qualityDate: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: 'Inter-Regular',
     color: '#9CA3AF',
+  },
+  correlationArea: {
+    gap: 16,
+    marginBottom: 16,
+  },
+  correlationBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  correlationLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#D1D5DB',
+    width: 80,
+  },
+  correlationBarContainer: {
+    flex: 1,
+    height: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 10,
+  },
+  correlationBarFill: {
+    height: '100%',
+    borderRadius: 10,
+  },
+  correlationValue: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#E5E7EB',
+    width: 40,
+    textAlign: 'right',
+  },
+  correlationInsight: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#8B5CF6',
+    textAlign: 'center',
+    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    padding: 12,
+    borderRadius: 8,
   },
   consistencyArea: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    marginBottom: 16,
   },
   consistencyDay: {
     alignItems: 'center',
@@ -429,10 +596,21 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   consistencyDate: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: 'Inter-Regular',
     color: '#9CA3AF',
     marginTop: 4,
+  },
+  consistencyScore: {
+    alignItems: 'center',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  consistencyScoreText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#8B5CF6',
   },
   insightsCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
