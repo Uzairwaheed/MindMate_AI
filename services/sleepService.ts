@@ -273,6 +273,94 @@ class SleepService {
     }
   }
 
+  // Enhanced analytics for Sleep Insights screen
+  async getSleepInsights(days: number = 7): Promise<{
+    chartData: SleepChartData[];
+    averageDuration: number;
+    sleepScore: number;
+    trend: 'up' | 'down' | 'stable';
+    qualityBreakdown: {
+      deep: number;
+      light: number;
+      awake: number;
+    };
+    recentEntries: SleepEntry[];
+  }> {
+    try {
+      const [analytics, chartData, recentEntries] = await Promise.all([
+        this.getSleepAnalytics(days),
+        this.getChartData(days),
+        this.getUserSleepEntries(5)
+      ]);
+
+      // Calculate comprehensive sleep score (0-100)
+      const durationScore = Math.min((analytics.weeklyAverage / 8) * 100, 100);
+      const qualityScore = (analytics.qualityAverage / 10) * 100;
+      const consistencyScore = analytics.consistency;
+      
+      const sleepScore = Math.round(
+        (durationScore * 0.4) + // 40% weight for duration
+        (qualityScore * 0.35) + // 35% weight for quality
+        (consistencyScore * 0.25) // 25% weight for consistency
+      );
+
+      // Calculate trend from chart data
+      const recentData = chartData.slice(-3).filter(d => d.duration !== null);
+      const earlierData = chartData.slice(0, 3).filter(d => d.duration !== null);
+      
+      let trend: 'up' | 'down' | 'stable' = 'stable';
+      
+      if (recentData.length > 0 && earlierData.length > 0) {
+        const recentAvg = recentData.reduce((sum, d) => sum + (d.duration || 0), 0) / recentData.length;
+        const earlierAvg = earlierData.reduce((sum, d) => sum + (d.duration || 0), 0) / earlierData.length;
+        
+        if (recentAvg > earlierAvg + 0.5) trend = 'up';
+        else if (recentAvg < earlierAvg - 0.5) trend = 'down';
+      }
+
+      // Generate quality breakdown based on sleep quality scores
+      const qualityBreakdown = this.generateQualityBreakdown(analytics.qualityAverage);
+
+      return {
+        chartData,
+        averageDuration: analytics.weeklyAverage,
+        sleepScore,
+        trend,
+        qualityBreakdown,
+        recentEntries,
+      };
+    } catch (error) {
+      console.error('Get sleep insights error:', error);
+      throw error;
+    }
+  }
+
+  // Generate sleep stage breakdown from quality data
+  private generateQualityBreakdown(avgQuality: number): {
+    deep: number;
+    light: number;
+    awake: number;
+  } {
+    // Base percentages for average sleep
+    const baseDeep = 22;
+    const baseLight = 65;
+    const baseAwake = 13;
+
+    // Adjust based on quality score (1-10 scale)
+    const qualityFactor = (avgQuality - 5.5) / 4.5; // Normalize to -1 to 1
+    
+    // Higher quality = more deep sleep, less awake time
+    const deep = Math.max(15, Math.min(35, baseDeep + (qualityFactor * 8)));
+    const awake = Math.max(5, Math.min(25, baseAwake - (qualityFactor * 6)));
+    const light = 100 - deep - awake;
+
+    return {
+      deep: Math.round(deep),
+      light: Math.round(light),
+      awake: Math.round(awake),
+    };
+  }
+
   // Get chart data for visualization
   async getChartData(days: number = 7): Promise<SleepChartData[]> {
     try {

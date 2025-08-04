@@ -1,48 +1,115 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { ChevronLeft, TrendingUp, Clock, Star, Calendar, Heart } from 'lucide-react-native';
+import { ChevronLeft, ChevronDown, Settings, Bot, TrendingUp, TrendingDown } from 'lucide-react-native';
 import { sleepService, SleepAnalytics, SleepChartData } from '@/services/sleepService';
 
-export default function SleepTrendsScreen() {
-  const [analytics, setAnalytics] = useState<SleepAnalytics>({
-    weeklyAverage: 0,
-    qualityAverage: 0,
-    consistency: 0,
-    totalEntries: 0,
-    insights: [],
+interface SleepInsightsData {
+  chartData: SleepChartData[];
+  averageDuration: number;
+  sleepScore: number;
+  trend: 'up' | 'down' | 'stable';
+  qualityBreakdown: {
+    deep: number;
+    light: number;
+    awake: number;
+  };
+  recentEntries: any[];
+}
+
+export default function SleepInsightsScreen() {
+  const [selectedPeriod, setSelectedPeriod] = useState('Last Week');
+  const [selectedDate, setSelectedDate] = useState('Aug 6');
+  const [showPeriodModal, setShowPeriodModal] = useState(false);
+  const [insightsData, setInsightsData] = useState<SleepInsightsData>({
+    chartData: [],
+    averageDuration: 0,
+    sleepScore: 0,
+    trend: 'stable',
+    qualityBreakdown: { deep: 0, light: 0, awake: 0 },
+    recentEntries: [],
   });
-  const [chartData, setChartData] = useState<SleepChartData[]>([]);
-  const [viewPeriod, setViewPeriod] = useState<7 | 30>(7);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadSleepTrends();
-  }, [viewPeriod]);
+  const periods = ['Last Week', 'Last Month', 'Last 3 Months'];
+  const dates = ['Aug 4', 'Aug 5', 'Aug 6'];
 
-  const loadSleepTrends = async () => {
+  useEffect(() => {
+    loadSleepInsights();
+  }, [selectedPeriod]);
+
+  const loadSleepInsights = async () => {
     try {
-      const [analyticsData, chartDataResult] = await Promise.all([
-        sleepService.getSleepAnalytics(viewPeriod),
-        sleepService.getChartData(viewPeriod)
-      ]);
+      setLoading(true);
       
-      setAnalytics(analyticsData);
-      setChartData(chartDataResult);
+      // Determine days based on selected period
+      const days = selectedPeriod === 'Last Week' ? 7 : 
+                   selectedPeriod === 'Last Month' ? 30 : 90;
+
+      const [analytics, chartData, recentEntries] = await Promise.all([
+        sleepService.getSleepAnalytics(days),
+        sleepService.getChartData(days),
+        sleepService.getUserSleepEntries(5)
+      ]);
+
+      // Calculate sleep score (0-100)
+      const sleepScore = Math.round(
+        (analytics.qualityAverage / 10) * 40 + // 40% weight for quality
+        (Math.min(analytics.weeklyAverage / 8, 1)) * 35 + // 35% weight for duration
+        (analytics.consistency / 100) * 25 // 25% weight for consistency
+      );
+
+      // Calculate trend
+      const recentAvg = chartData.slice(-3).reduce((sum, d) => sum + (d.duration || 0), 0) / 3;
+      const earlierAvg = chartData.slice(0, 3).reduce((sum, d) => sum + (d.duration || 0), 0) / 3;
+      const trend = recentAvg > earlierAvg + 0.5 ? 'up' : 
+                   recentAvg < earlierAvg - 0.5 ? 'down' : 'stable';
+
+      // Generate quality breakdown (estimated from available data)
+      const qualityBreakdown = generateQualityBreakdown(analytics.qualityAverage);
+
+      setInsightsData({
+        chartData,
+        averageDuration: analytics.weeklyAverage,
+        sleepScore,
+        trend,
+        qualityBreakdown,
+        recentEntries,
+      });
     } catch (error) {
-      console.error('Failed to load sleep trends:', error);
+      console.error('Failed to load sleep insights:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const renderDurationChart = () => {
-    const maxDuration = Math.max(...chartData.map(d => d.duration || 0), 10);
+  const generateQualityBreakdown = (avgQuality: number) => {
+    // Estimate sleep stage percentages based on quality score
+    const baseDeep = 20; // Base deep sleep percentage
+    const baseLight = 65; // Base light sleep percentage
+    const baseAwake = 15; // Base awake percentage
+
+    // Adjust based on quality (higher quality = more deep sleep, less awake time)
+    const qualityFactor = (avgQuality - 5) / 5; // -1 to 1 range
+    
+    const deep = Math.max(15, Math.min(35, baseDeep + (qualityFactor * 10)));
+    const awake = Math.max(5, Math.min(25, baseAwake - (qualityFactor * 8)));
+    const light = 100 - deep - awake;
+
+    return {
+      deep: Math.round(deep),
+      light: Math.round(light),
+      awake: Math.round(awake),
+    };
+  };
+
+  const renderSleepChart = () => {
+    const maxDuration = Math.max(...insightsData.chartData.map(d => d.duration || 0), 10);
+    const chartHeight = 120;
     
     return (
       <View style={styles.chartContainer}>
-        <Text style={styles.chartTitle}>Sleep Duration Trend</Text>
         <View style={styles.chartArea}>
           {/* Y-axis labels */}
           <View style={styles.yAxis}>
@@ -51,370 +118,377 @@ export default function SleepTrendsScreen() {
             ))}
           </View>
           
-          {/* Chart bars */}
-          <View style={styles.chartBars}>
-            {chartData.map((point, index) => {
-              const height = point.duration ? (point.duration / maxDuration) * 100 : 0;
-              const color = point.duration 
-                ? (point.duration >= 7 ? '#10B981' : point.duration >= 6 ? '#F59E0B' : '#EF4444')
-                : '#374151';
-              
-              return (
-                <View key={index} style={styles.chartBarContainer}>
-                  <View style={styles.chartBarBackground}>
+          {/* Chart content */}
+          <View style={styles.chartContent}>
+            {/* Grid lines */}
+            <View style={styles.chartGrid}>
+              {[0, 25, 50, 75].map(value => (
+                <View key={value} style={styles.gridLine} />
+              ))}
+            </View>
+            
+            {/* Data line and points */}
+            <View style={styles.dataContainer}>
+              {insightsData.chartData.map((point, index) => {
+                if (!point.duration) return null;
+                
+                const x = (index / (insightsData.chartData.length - 1)) * 100;
+                const y = ((maxDuration - point.duration) / maxDuration) * 100;
+                
+                return (
+                  <View key={index}>
+                    {/* Data point */}
                     <View 
                       style={[
-                        styles.chartBar,
-                        { height: `${height}%`, backgroundColor: color }
+                        styles.dataPoint,
+                        { 
+                          left: `${x}%`,
+                          top: `${y}%`,
+                        }
                       ]} 
                     />
+                    
+                    {/* Line to next point */}
+                    {index < insightsData.chartData.length - 1 && (
+                      (() => {
+                        const nextPoint = insightsData.chartData[index + 1];
+                        if (!nextPoint.duration) return null;
+                        
+                        const x2 = ((index + 1) / (insightsData.chartData.length - 1)) * 100;
+                        const y2 = ((maxDuration - nextPoint.duration) / maxDuration) * 100;
+                        
+                        const lineLength = Math.sqrt(
+                          Math.pow((x2 - x) * 2.5, 2) + 
+                          Math.pow((y2 - y) * 1.2, 2)
+                        );
+                        const angle = Math.atan2((y2 - y) * 1.2, (x2 - x) * 2.5) * 180 / Math.PI;
+                        
+                        return (
+                          <View
+                            style={[
+                              styles.chartLine,
+                              {
+                                left: `${x}%`,
+                                top: `${y}%`,
+                                width: lineLength,
+                                transform: [{ rotate: `${angle}deg` }],
+                              }
+                            ]}
+                          />
+                        );
+                      })()
+                    )}
                   </View>
-                  <Text style={styles.chartBarLabel}>
-                    {point.date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}
-                  </Text>
-                  {point.duration && (
-                    <Text style={styles.chartBarValue}>
-                      {sleepService.formatDuration(point.duration)}
-                    </Text>
-                  )}
-                </View>
-              );
-            })}
+                );
+              })}
+            </View>
           </View>
         </View>
         
-        {/* Legend */}
-        <View style={styles.chartLegend}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
-            <Text style={styles.legendText}>7+ hours (Good)</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
-            <Text style={styles.legendText}>6-7 hours (Fair)</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
-            <Text style={styles.legendText}>{'< 6 hours (Poor)'}</Text>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
-  const renderQualityChart = () => {
-    return (
-      <View style={styles.chartContainer}>
-        <Text style={styles.chartTitle}>Sleep Quality Trend</Text>
-        <View style={styles.qualityChartArea}>
-          {chartData.map((point, index) => {
-            const quality = point.quality || 0;
-            const color = sleepService.getQualityColor(quality);
-            
-            return (
-              <View key={index} style={styles.qualityPoint}>
-                <View style={styles.qualityBar}>
-                  <View 
-                    style={[
-                      styles.qualityBarFill,
-                      { 
-                        height: `${(quality / 10) * 100}%`,
-                        backgroundColor: color
-                      }
-                    ]} 
-                  />
-                </View>
-                <Text style={styles.qualityValue}>{quality || 0}</Text>
-                <Text style={styles.qualityDate}>
-                  {point.date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-      </View>
-    );
-  };
-
-  const renderMoodCorrelationChart = () => {
-    if (!analytics.moodCorrelation) return null;
-
-    const { averageMoodWith7Plus, averageMoodWithLess7, correlation } = analytics.moodCorrelation;
-    
-    return (
-      <View style={styles.chartContainer}>
-        <Text style={styles.chartTitle}>Sleep vs Mood Correlation</Text>
-        <View style={styles.correlationArea}>
-          <View style={styles.correlationBar}>
-            <Text style={styles.correlationLabel}>7+ Hours Sleep</Text>
-            <View style={styles.correlationBarContainer}>
-              <View 
-                style={[
-                  styles.correlationBarFill,
-                  { 
-                    width: `${(averageMoodWith7Plus / 10) * 100}%`,
-                    backgroundColor: '#10B981'
-                  }
-                ]} 
-              />
-            </View>
-            <Text style={styles.correlationValue}>{averageMoodWith7Plus}/10</Text>
-          </View>
-          
-          <View style={styles.correlationBar}>
-            <Text style={styles.correlationLabel}>{'< 7 Hours Sleep'}</Text>
-            <View style={styles.correlationBarContainer}>
-              <View 
-                style={[
-                  styles.correlationBarFill,
-                  { 
-                    width: `${(averageMoodWithLess7 / 10) * 100}%`,
-                    backgroundColor: '#EF4444'
-                  }
-                ]} 
-              />
-            </View>
-            <Text style={styles.correlationValue}>{averageMoodWithLess7}/10</Text>
-          </View>
-        </View>
-        
-        <Text style={styles.correlationInsight}>
-          {correlation === 'positive' && '✅ Better sleep improves your mood'}
-          {correlation === 'negative' && '⚠️ Sleep duration doesn\'t seem to affect your mood'}
-          {correlation === 'neutral' && '➡️ No clear correlation between sleep and mood yet'}
-        </Text>
-      </View>
-    );
-  };
-
-  const renderConsistencyChart = () => {
-    return (
-      <View style={styles.chartContainer}>
-        <Text style={styles.chartTitle}>Sleep Schedule Consistency</Text>
-        <View style={styles.consistencyArea}>
-          {chartData.map((point, index) => (
-            <View key={index} style={styles.consistencyDay}>
-              <Text style={styles.consistencyTime}>
-                {point.bedtime || '--:--'}
-              </Text>
-              <View style={styles.consistencyBar}>
-                <View style={[
-                  styles.consistencyBlock,
-                  { backgroundColor: point.bedtime ? '#8B5CF6' : '#374151' }
-                ]} />
-              </View>
-              <Text style={styles.consistencyTime}>
-                {point.wakeTime || '--:--'}
-              </Text>
-              <Text style={styles.consistencyDate}>
-                {point.date.toLocaleDateString('en-US', { weekday: 'short' })}
-              </Text>
-            </View>
+        {/* X-axis labels */}
+        <View style={styles.xAxis}>
+          {insightsData.chartData.slice(-7).map((point, index) => (
+            <Text key={index} style={styles.xAxisLabel}>
+              {point.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </Text>
           ))}
         </View>
-        <View style={styles.consistencyScore}>
-          <Text style={styles.consistencyScoreText}>
-            Consistency Score: {analytics.consistency}%
-          </Text>
+      </View>
+    );
+  };
+
+  const renderQualityDonut = () => {
+    const { deep, light, awake } = insightsData.qualityBreakdown;
+    const total = deep + light + awake;
+    
+    return (
+      <View style={styles.donutContainer}>
+        <View style={styles.donutChart}>
+          {/* Simplified donut representation */}
+          <View style={styles.donutCenter}>
+            <Text style={styles.donutCenterText}>Sleep</Text>
+            <Text style={styles.donutCenterText}>Quality</Text>
+          </View>
         </View>
+        
+        <View style={styles.donutLegend}>
+          <View style={styles.legendRow}>
+            <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+            <Text style={styles.legendLabel}>Deep</Text>
+            <Text style={styles.legendValue}>{deep}%</Text>
+          </View>
+          <View style={styles.legendRow}>
+            <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
+            <Text style={styles.legendLabel}>Light</Text>
+            <Text style={styles.legendValue}>{light}%</Text>
+          </View>
+          <View style={styles.legendRow}>
+            <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
+            <Text style={styles.legendLabel}>Awake</Text>
+            <Text style={styles.legendValue}>{awake}%</Text>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderRecentEntries = () => {
+    return (
+      <View style={styles.recentEntriesContainer}>
+        {insightsData.recentEntries.slice(0, 3).map((entry, index) => {
+          const quality = entry.sleep_quality;
+          const qualityColor = quality >= 7 ? '#10B981' : quality >= 5 ? '#F59E0B' : '#EF4444';
+          
+          return (
+            <View key={entry.id} style={styles.entryRow}>
+              <View style={styles.entryDate}>
+                <Text style={styles.entryDayText}>
+                  {new Date(entry.entry_date).toLocaleDateString('en-US', { weekday: 'short' })}
+                </Text>
+                <Text style={styles.entryDateText}>
+                  {new Date(entry.entry_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </Text>
+              </View>
+              
+              <View style={styles.entryDuration}>
+                <Text style={styles.entryDurationText}>
+                  {sleepService.formatDuration(entry.sleep_duration)}
+                </Text>
+              </View>
+              
+              <View style={styles.entryQuality}>
+                <View style={[styles.qualityDot, { backgroundColor: qualityColor }]} />
+                <View style={[styles.qualityDot, { backgroundColor: quality >= 6 ? qualityColor : '#374151' }]} />
+                <View style={[styles.qualityDot, { backgroundColor: quality >= 8 ? qualityColor : '#374151' }]} />
+              </View>
+              
+              <View style={styles.entryPattern}>
+                <View style={styles.sleepBar}>
+                  <View style={[styles.sleepSegment, { backgroundColor: '#10B981', flex: 0.25 }]} />
+                  <View style={[styles.sleepSegment, { backgroundColor: '#F59E0B', flex: 0.6 }]} />
+                  <View style={[styles.sleepSegment, { backgroundColor: '#EF4444', flex: 0.15 }]} />
+                </View>
+              </View>
+            </View>
+          );
+        })}
       </View>
     );
   };
 
   return (
-    <LinearGradient
-      colors={['#1F2937', '#374151', '#4B5563']}
-      style={styles.container}
-    >
-      <View style={styles.header}>
+    <View style={styles.container}>
+      {/* Header */}
+      <LinearGradient
+        colors={['#1a1f36', '#2d3748']}
+        style={styles.header}
+      >
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <ChevronLeft size={24} color="#E5E7EB" />
+          <ChevronLeft size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.title}>Sleep Trends</Text>
-        <Text style={styles.subtitle}>Analyze your sleep patterns</Text>
-      </View>
+        
+        <Text style={styles.title}>Sleep Insights</Text>
+        
+        <TouchableOpacity
+          style={styles.periodSelector}
+          onPress={() => setShowPeriodModal(true)}
+        >
+          <Text style={styles.periodText}>{selectedPeriod}</Text>
+          <ChevronDown size={16} color="#FFFFFF" />
+        </TouchableOpacity>
+      </LinearGradient>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Period Selector */}
-        <View style={styles.periodSelector}>
-          <TouchableOpacity
-            style={[styles.periodButton, viewPeriod === 7 && styles.periodButtonActive]}
-            onPress={() => setViewPeriod(7)}
-          >
-            <Text style={[styles.periodButtonText, viewPeriod === 7 && styles.periodButtonTextActive]}>
-              7 Days
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.periodButton, viewPeriod === 30 && styles.periodButtonActive]}
-            onPress={() => setViewPeriod(30)}
-          >
-            <Text style={[styles.periodButtonText, viewPeriod === 30 && styles.periodButtonTextActive]}>
-              30 Days
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Stats Overview */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Clock size={24} color="#8B5CF6" />
-            <Text style={styles.statValue}>
-              {loading ? '...' : sleepService.formatDuration(analytics.weeklyAverage)}
-            </Text>
-            <Text style={styles.statLabel}>Average Sleep</Text>
-          </View>
-          
-          <View style={styles.statCard}>
-            <Star size={24} color="#F59E0B" />
-            <Text style={styles.statValue}>
-              {loading ? '...' : `${analytics.qualityAverage}/10`}
-            </Text>
-            <Text style={styles.statLabel}>Avg Quality</Text>
-          </View>
-          
-          <View style={styles.statCard}>
-            <TrendingUp size={24} color="#10B981" />
-            <Text style={styles.statValue}>
-              {loading ? '...' : `${analytics.consistency}%`}
-            </Text>
-            <Text style={styles.statLabel}>Consistency</Text>
-          </View>
-        </View>
-
-        {/* Charts */}
-        {renderDurationChart()}
-        {renderQualityChart()}
-        {renderMoodCorrelationChart()}
-        {renderConsistencyChart()}
-
-        {/* Insights */}
-        <View style={styles.insightsCard}>
-          <Text style={styles.insightsTitle}>📊 Sleep Insights</Text>
-          {analytics.insights.map((insight, index) => (
-            <Text key={index} style={styles.insightText}>• {insight}</Text>
+        {/* Date Navigation */}
+        <View style={styles.dateNavigation}>
+          {dates.map((date) => (
+            <TouchableOpacity
+              key={date}
+              style={[
+                styles.dateTab,
+                selectedDate === date && styles.dateTabActive
+              ]}
+              onPress={() => setSelectedDate(date)}
+            >
+              <Text style={[
+                styles.dateTabText,
+                selectedDate === date && styles.dateTabTextActive
+              ]}>
+                {date}
+              </Text>
+            </TouchableOpacity>
           ))}
         </View>
 
-        {/* Recommendations */}
-        <View style={styles.recommendationsCard}>
-          <Text style={styles.recommendationsTitle}>💡 Recommendations</Text>
-          <Text style={styles.recommendationText}>
-            • Aim for 7-9 hours of sleep per night
-          </Text>
-          <Text style={styles.recommendationText}>
-            • Keep a consistent bedtime and wake time
-          </Text>
-          <Text style={styles.recommendationText}>
-            • Create a relaxing bedtime routine
-          </Text>
-          <Text style={styles.recommendationText}>
-            • Avoid screens 1 hour before bed
-          </Text>
-          <Text style={styles.recommendationText}>
-            • Keep your bedroom cool, dark, and quiet
-          </Text>
+        {/* Sleep Duration Chart */}
+        <View style={styles.chartSection}>
+          <Text style={styles.chartTitle}>Sleep Duration</Text>
+          {renderSleepChart()}
+        </View>
+
+        {/* Metrics Cards */}
+        <View style={styles.metricsRow}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>
+              {loading ? '...' : sleepService.formatDuration(insightsData.averageDuration)}
+            </Text>
+            <View style={styles.metricTrendRow}>
+              <Text style={styles.metricLabel}>Average</Text>
+              {insightsData.trend === 'up' && <TrendingUp size={12} color="#10B981" />}
+              {insightsData.trend === 'down' && <TrendingDown size={12} color="#EF4444" />}
+            </View>
+          </View>
+          
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>
+              {loading ? '...' : `${insightsData.sleepScore}/100`}
+            </Text>
+            <Text style={styles.metricLabel}>Sleep Score</Text>
+          </View>
+        </View>
+
+        {/* Sleep Quality Breakdown */}
+        <View style={styles.qualitySection}>
+          <Text style={styles.sectionTitle}>Sleep Quality Breakdown</Text>
+          {renderQualityDonut()}
+        </View>
+
+        {/* Recent Sleep Entries */}
+        <View style={styles.recentSection}>
+          <Text style={styles.sectionTitle}>Recent Sleep Entries</Text>
+          {renderRecentEntries()}
+        </View>
+
+        {/* Bottom Actions */}
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity style={styles.settingsButton}>
+            <Settings size={20} color="#9CA3AF" />
+            <Text style={styles.settingsButtonText}>Sleep Settings</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.aiHelpButton}>
+            <Bot size={20} color="#FFFFFF" />
+            <Text style={styles.aiHelpButtonText}>AI Sleep Help</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
-    </LinearGradient>
+
+      {/* Period Selection Modal */}
+      <Modal
+        visible={showPeriodModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPeriodModal(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          onPress={() => setShowPeriodModal(false)}
+        >
+          <View style={styles.modalContent}>
+            {periods.map((period) => (
+              <TouchableOpacity
+                key={period}
+                style={styles.modalOption}
+                onPress={() => {
+                  setSelectedPeriod(period);
+                  setShowPeriodModal(false);
+                }}
+              >
+                <Text style={[
+                  styles.modalOptionText,
+                  selectedPeriod === period && styles.modalOptionTextActive
+                ]}>
+                  {period}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#1a1f36',
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingTop: 60,
     paddingHorizontal: 24,
-    paddingBottom: 24,
-    alignItems: 'center',
-    position: 'relative',
+    paddingBottom: 20,
   },
   backButton: {
-    position: 'absolute',
-    left: 24,
-    top: 60,
     padding: 8,
   },
   title: {
-    fontSize: 24,
+    fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#E5E7EB',
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-  },
-  scrollView: {
+    color: '#FFFFFF',
     flex: 1,
-    paddingHorizontal: 24,
+    textAlign: 'center',
   },
   periodSelector: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 24,
+    alignItems: 'center',
+    backgroundColor: '#8B5CF6',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
   },
-  periodButton: {
+  periodText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
+    marginRight: 4,
+  },
+  scrollView: {
     flex: 1,
+    backgroundColor: '#1a1f36',
+  },
+  dateNavigation: {
+    flexDirection: 'row',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    gap: 8,
+  },
+  dateTab: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
     paddingVertical: 8,
     alignItems: 'center',
-    borderRadius: 8,
   },
-  periodButtonActive: {
+  dateTabActive: {
     backgroundColor: '#8B5CF6',
   },
-  periodButtonText: {
+  dateTabText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     color: '#9CA3AF',
   },
-  periodButtonTextActive: {
+  dateTabTextActive: {
     color: '#FFFFFF',
   },
-  statsContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#E5E7EB',
-    marginVertical: 8,
-  },
-  statLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    textAlign: 'center',
-  },
-  chartContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 16,
-    padding: 20,
+  chartSection: {
+    paddingHorizontal: 24,
     marginBottom: 24,
   },
   chartTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#E5E7EB',
+    color: '#FFFFFF',
     marginBottom: 16,
-    textAlign: 'center',
+  },
+  chartContainer: {
+    height: 180,
   },
   chartArea: {
     flexDirection: 'row',
@@ -428,226 +502,278 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   yAxisLabel: {
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#9CA3AF',
   },
-  chartBars: {
+  chartContent: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-around',
+    position: 'relative',
   },
-  chartBarContainer: {
-    alignItems: 'center',
-    flex: 1,
+  chartGrid: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'space-between',
   },
-  chartBarBackground: {
-    height: 100,
-    width: 16,
+  gridLine: {
+    height: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
-    justifyContent: 'flex-end',
-    marginBottom: 4,
   },
-  chartBar: {
-    width: '100%',
-    borderRadius: 8,
-    minHeight: 4,
+  dataContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
-  chartBarLabel: {
-    fontSize: 10,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    textAlign: 'center',
-    marginBottom: 2,
-  },
-  chartBarValue: {
-    fontSize: 9,
-    fontFamily: 'Inter-Medium',
-    color: '#D1D5DB',
-    textAlign: 'center',
-  },
-  chartLegend: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  legendDot: {
+  dataPoint: {
+    position: 'absolute',
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginRight: 6,
+    backgroundColor: '#3B82F6',
+    marginLeft: -4,
+    marginTop: -4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
-  legendText: {
-    fontSize: 10,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+  chartLine: {
+    position: 'absolute',
+    height: 2,
+    backgroundColor: '#3B82F6',
+    transformOrigin: 'left center',
   },
-  qualityChartArea: {
+  xAxis: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    alignItems: 'flex-end',
-    height: 100,
-    marginBottom: 12,
+    paddingLeft: 30,
   },
-  qualityPoint: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  qualityBar: {
-    width: 16,
-    height: 80,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
-    justifyContent: 'flex-end',
-    marginBottom: 4,
-  },
-  qualityBarFill: {
-    width: '100%',
-    borderRadius: 8,
-    minHeight: 4,
-  },
-  qualityValue: {
-    fontSize: 10,
-    fontFamily: 'Inter-SemiBold',
-    color: '#E5E7EB',
-    marginBottom: 2,
-  },
-  qualityDate: {
-    fontSize: 9,
+  xAxisLabel: {
+    fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#9CA3AF',
   },
-  correlationArea: {
+  metricsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 24,
     gap: 16,
-    marginBottom: 16,
-  },
-  correlationBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  correlationLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#D1D5DB',
-    width: 80,
-  },
-  correlationBarContainer: {
-    flex: 1,
-    height: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 10,
-  },
-  correlationBarFill: {
-    height: '100%',
-    borderRadius: 10,
-  },
-  correlationValue: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#E5E7EB',
-    width: 40,
-    textAlign: 'right',
-  },
-  correlationInsight: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#8B5CF6',
-    textAlign: 'center',
-    backgroundColor: 'rgba(139, 92, 246, 0.1)',
-    padding: 12,
-    borderRadius: 8,
-  },
-  consistencyArea: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 16,
-  },
-  consistencyDay: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  consistencyTime: {
-    fontSize: 10,
-    fontFamily: 'Inter-Regular',
-    color: '#D1D5DB',
-    marginBottom: 4,
-  },
-  consistencyBar: {
-    height: 40,
-    width: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginVertical: 4,
-  },
-  consistencyBlock: {
-    width: 8,
-    height: 20,
-    borderRadius: 4,
-  },
-  consistencyDate: {
-    fontSize: 9,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    marginTop: 4,
-  },
-  consistencyScore: {
-    alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  consistencyScoreText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#8B5CF6',
-  },
-  insightsCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 16,
-    padding: 20,
     marginBottom: 24,
   },
-  insightsTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#E5E7EB',
-    marginBottom: 12,
-  },
-  insightText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#D1D5DB',
-    lineHeight: 20,
-    marginBottom: 6,
-  },
-  recommendationsCard: {
+  metricCard: {
+    flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 16,
+    borderRadius: 12,
     padding: 20,
-    marginBottom: 40,
+    alignItems: 'center',
   },
-  recommendationsTitle: {
-    fontSize: 16,
+  metricValue: {
+    fontSize: 24,
     fontFamily: 'Inter-SemiBold',
-    color: '#E5E7EB',
-    marginBottom: 12,
+    color: '#FFFFFF',
+    marginBottom: 4,
   },
-  recommendationText: {
+  metricTrendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metricLabel: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#D1D5DB',
-    lineHeight: 20,
-    marginBottom: 4,
+    color: '#9CA3AF',
+  },
+  qualitySection: {
+    paddingHorizontal: 24,
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    marginBottom: 16,
+  },
+  donutContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 20,
+  },
+  donutChart: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#10B981',
+    alignSelf: 'center',
+    marginBottom: 20,
+    position: 'relative',
+    // Simplified donut - in production you'd use a proper chart library
+  },
+  donutCenter: {
+    position: 'absolute',
+    top: 35,
+    left: 35,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#1a1f36',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  donutCenterText: {
+    fontSize: 10,
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  donutLegend: {
+    gap: 8,
+  },
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  legendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  legendLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#FFFFFF',
+    flex: 1,
+    marginLeft: 12,
+  },
+  legendValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  recentSection: {
+    paddingHorizontal: 24,
+    marginBottom: 24,
+  },
+  recentEntriesContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 16,
+  },
+  entryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  entryDate: {
+    width: 60,
+  },
+  entryDayText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#9CA3AF',
+  },
+  entryDateText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  entryDuration: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  entryDurationText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  entryQuality: {
+    flexDirection: 'row',
+    gap: 4,
+    marginHorizontal: 16,
+  },
+  qualityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  entryPattern: {
+    width: 60,
+  },
+  sleepBar: {
+    flexDirection: 'row',
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  sleepSegment: {
+    height: '100%',
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+    gap: 12,
+  },
+  settingsButton: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingsButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#9CA3AF',
+    marginLeft: 8,
+  },
+  aiHelpButton: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#8B5CF6',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiHelpButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    marginLeft: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    minWidth: 200,
+  },
+  modalOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  modalOptionText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#1F2937',
+    textAlign: 'center',
+  },
+  modalOptionTextActive: {
+    color: '#8B5CF6',
+    fontFamily: 'Inter-SemiBold',
   },
 });
