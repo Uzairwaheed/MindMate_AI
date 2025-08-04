@@ -11,6 +11,7 @@ type SleepEntry = Database['public']['Tables']['sleep_entries']['Row'];
 interface ChartDataPoint {
   date: Date;
   duration: number | null;
+  quality: number | null;
   x: number;
   y: number;
 }
@@ -30,6 +31,13 @@ interface ProcessedEntry {
   qualityColor: string;
 }
 
+interface QuickStats {
+  bestSleepDay: string;
+  averageBedtime: string;
+  commonWakeMood: string;
+  consistencyScore: number;
+}
+
 export default function SleepInsightsScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState('Last Week');
   const [showPeriodModal, setShowPeriodModal] = useState(false);
@@ -39,10 +47,10 @@ export default function SleepInsightsScreen() {
   const [sleepScore, setSleepScore] = useState(0);
   const [qualityBreakdown, setQualityBreakdown] = useState<QualityBreakdown>({ good: 0, okay: 0, poor: 0 });
   const [recentEntries, setRecentEntries] = useState<ProcessedEntry[]>([]);
-  const [quickStats, setQuickStats] = useState({
-    bestSleepDay: '',
-    averageBedtime: '',
-    commonWakeMood: '',
+  const [quickStats, setQuickStats] = useState<QuickStats>({
+    bestSleepDay: 'No data',
+    averageBedtime: '00:00',
+    commonWakeMood: 'No data',
     consistencyScore: 0,
   });
   const [loading, setLoading] = useState(true);
@@ -50,62 +58,75 @@ export default function SleepInsightsScreen() {
   const periods = ['Last Week', 'Last Month', 'Last 3 Months'];
 
   useEffect(() => {
-    loadSleepData();
+    loadRealSleepData();
   }, [selectedPeriod]);
 
-  const loadSleepData = async () => {
+  const loadRealSleepData = async () => {
     try {
       setLoading(true);
       
       const days = selectedPeriod === 'Last Week' ? 7 : 
                    selectedPeriod === 'Last Month' ? 30 : 90;
 
-      // Get all entries for the selected period
+      // Get real user sleep entries from database
       const endDate = new Date();
       const startDate = new Date();
       startDate.setDate(endDate.getDate() - days);
       
-      const entries = await sleepService.getSleepEntriesByDateRange(
+      const realEntries = await sleepService.getSleepEntriesByDateRange(
         startDate.toISOString().split('T')[0],
         endDate.toISOString().split('T')[0]
       );
 
-      setSleepEntries(entries);
+      setSleepEntries(realEntries);
 
-      // Process chart data
-      const processedChartData = generateChartData(entries, days);
+      // Process real data for chart
+      const processedChartData = generateChartDataFromRealEntries(realEntries, days);
       setChartData(processedChartData);
 
-      // Calculate average sleep
-      const avgSleep = entries.length > 0 
-        ? entries.reduce((sum, entry) => sum + entry.sleep_duration, 0) / entries.length
+      // Calculate real average sleep from user data
+      const realAverageSleep = realEntries.length > 0 
+        ? realEntries.reduce((sum, entry) => sum + entry.sleep_duration, 0) / realEntries.length
         : 0;
-      setAverageSleep(avgSleep);
+      setAverageSleep(realAverageSleep);
 
-      // Calculate sleep score
-      const score = calculateSleepScore(entries);
-      setSleepScore(score);
+      // Calculate real sleep score from user data
+      const realSleepScore = calculateRealSleepScore(realEntries);
+      setSleepScore(realSleepScore);
 
-      // Calculate quality breakdown
-      const breakdown = calculateQualityBreakdown(entries);
-      setQualityBreakdown(breakdown);
+      // Calculate real quality breakdown from user data
+      const realQualityBreakdown = calculateRealQualityBreakdown(realEntries);
+      setQualityBreakdown(realQualityBreakdown);
 
-      // Process recent entries
-      const processed = processRecentEntries(entries.slice(0, 5));
-      setRecentEntries(processed);
+      // Process real recent entries
+      const processedRecentEntries = processRealRecentEntries(realEntries.slice(-5));
+      setRecentEntries(processedRecentEntries);
 
-      // Calculate quick stats
-      const stats = calculateQuickStats(entries);
-      setQuickStats(stats);
+      // Calculate real quick stats from user data
+      const realQuickStats = calculateRealQuickStats(realEntries);
+      setQuickStats(realQuickStats);
 
     } catch (error) {
-      console.error('Failed to load sleep data:', error);
+      console.error('Failed to load real sleep data:', error);
+      // Don't show mock data - show empty state instead
+      setSleepEntries([]);
+      setChartData([]);
+      setAverageSleep(0);
+      setSleepScore(0);
+      setQualityBreakdown({ good: 0, okay: 0, poor: 0 });
+      setRecentEntries([]);
+      setQuickStats({
+        bestSleepDay: 'No data',
+        averageBedtime: '00:00',
+        commonWakeMood: 'No data',
+        consistencyScore: 0,
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const generateChartData = (entries: SleepEntry[], days: number): ChartDataPoint[] => {
+  const generateChartDataFromRealEntries = (entries: SleepEntry[], days: number): ChartDataPoint[] => {
     const chartPoints: ChartDataPoint[] = [];
     const chartWidth = 280;
     const chartHeight = 120;
@@ -117,6 +138,7 @@ export default function SleepInsightsScreen() {
       
       const entry = entries.find(e => e.entry_date === dateStr);
       const duration = entry ? entry.sleep_duration : null;
+      const quality = entry ? entry.sleep_quality : null;
       
       // Calculate x,y coordinates for chart
       const x = (days - 1 - i) / (days - 1) * chartWidth;
@@ -125,6 +147,7 @@ export default function SleepInsightsScreen() {
       chartPoints.push({
         date,
         duration,
+        quality,
         x,
         y,
       });
@@ -133,7 +156,7 @@ export default function SleepInsightsScreen() {
     return chartPoints;
   };
 
-  const calculateSleepScore = (entries: SleepEntry[]): number => {
+  const calculateRealSleepScore = (entries: SleepEntry[]): number => {
     if (entries.length === 0) return 0;
 
     let totalScore = 0;
@@ -151,8 +174,8 @@ export default function SleepInsightsScreen() {
       // Quality score (35% weight) - based on 1-10 rating
       const qualityScore = (entry.sleep_quality / 10) * 35;
       
-      // Consistency bonus (25% weight) - simplified for now
-      const consistencyScore = 25;
+      // Consistency bonus (25% weight) - calculate from bedtime regularity
+      const consistencyScore = calculateConsistencyForEntry(entries, entry);
       
       totalScore += durationScore + qualityScore + consistencyScore;
     });
@@ -160,7 +183,17 @@ export default function SleepInsightsScreen() {
     return Math.round(totalScore / entries.length);
   };
 
-  const calculateQualityBreakdown = (entries: SleepEntry[]): QualityBreakdown => {
+  const calculateConsistencyForEntry = (allEntries: SleepEntry[], currentEntry: SleepEntry): number => {
+    if (allEntries.length < 2) return 25; // Full consistency score for single entry
+    
+    const bedtimes = allEntries.map(e => e.bedtime);
+    const avgBedtime = calculateAverageTime(bedtimes);
+    const variance = calculateTimeVariance([currentEntry.bedtime], avgBedtime);
+    
+    return Math.max(0, 25 - (variance * 5));
+  };
+
+  const calculateRealQualityBreakdown = (entries: SleepEntry[]): QualityBreakdown => {
     if (entries.length === 0) {
       return { good: 0, okay: 0, poor: 0 };
     }
@@ -171,7 +204,7 @@ export default function SleepInsightsScreen() {
       const quality = entry.sleep_quality;
       const duration = entry.sleep_duration;
 
-      // Quality assessment based on duration and quality rating
+      // Real quality assessment based on actual user data
       if (quality >= 7 && duration >= 7 && duration <= 9) {
         good++;
       } else if (quality >= 5 && duration >= 6 && duration <= 10) {
@@ -189,12 +222,12 @@ export default function SleepInsightsScreen() {
     };
   };
 
-  const processRecentEntries = (entries: SleepEntry[]): ProcessedEntry[] => {
+  const processRealRecentEntries = (entries: SleepEntry[]): ProcessedEntry[] => {
     return entries.map(entry => {
       const quality = entry.sleep_quality;
       const duration = entry.sleep_duration;
       
-      // Determine quality level
+      // Determine real quality level from user data
       let qualityLevel: 'good' | 'okay' | 'poor' = 'poor';
       let qualityColor = '#EF4444';
       
@@ -206,25 +239,35 @@ export default function SleepInsightsScreen() {
         qualityColor = '#F59E0B';
       }
 
-      // Determine mood
-      let moodText = 'tired';
-      let moodEmoji = '😴';
+      // Determine mood from real sleep data
+      let moodText = entry.mood_after_sleep.toLowerCase();
+      let moodEmoji = '😊';
       
-      if (quality >= 8 && duration >= 7) {
-        moodText = 'energized';
-        moodEmoji = '⚡';
-      } else if (quality >= 6) {
-        moodText = 'rested';
-        moodEmoji = '😊';
-      } else if (quality >= 4) {
-        moodText = 'tired';
-        moodEmoji = '😴';
-      } else {
-        moodText = 'exhausted';
-        moodEmoji = '😵';
+      switch (moodText) {
+        case 'great':
+        case 'amazing':
+          moodEmoji = '⚡';
+          moodText = 'energized';
+          break;
+        case 'good':
+          moodEmoji = '😊';
+          moodText = 'rested';
+          break;
+        case 'fair':
+          moodEmoji = '😐';
+          moodText = 'okay';
+          break;
+        case 'poor':
+        case 'terrible':
+          moodEmoji = '😴';
+          moodText = 'tired';
+          break;
+        default:
+          moodEmoji = '😊';
+          moodText = 'rested';
       }
 
-      // Calculate entry score
+      // Calculate real entry score from actual data
       const durationScore = duration >= 7 && duration <= 9 
         ? 40 : Math.max(0, 40 - Math.abs(duration - 8) * 5);
       const qualityScore = (quality / 10) * 60;
@@ -241,7 +284,7 @@ export default function SleepInsightsScreen() {
     });
   };
 
-  const calculateQuickStats = (entries: SleepEntry[]) => {
+  const calculateRealQuickStats = (entries: SleepEntry[]): QuickStats => {
     if (entries.length === 0) {
       return {
         bestSleepDay: 'No data',
@@ -251,12 +294,12 @@ export default function SleepInsightsScreen() {
       };
     }
 
-    // Best sleep day (highest score)
+    // Best sleep day from real data (highest calculated score)
     let bestEntry = entries[0];
     let bestScore = 0;
     
     entries.forEach(entry => {
-      const score = calculateSleepScore([entry]);
+      const score = calculateRealSleepScore([entry]);
       if (score > bestScore) {
         bestScore = score;
         bestEntry = entry;
@@ -268,30 +311,64 @@ export default function SleepInsightsScreen() {
       day: 'numeric' 
     });
 
-    // Average bedtime
+    // Real average bedtime from user data
     const bedtimes = entries.map(e => e.bedtime);
-    const avgBedtime = calculateAverageTime(bedtimes);
+    const realAverageBedtime = calculateAverageTime(bedtimes);
 
-    // Most common wake mood
+    // Most common wake mood from real user data
     const moods = entries.map(e => e.mood_after_sleep);
     const moodCounts = moods.reduce((acc, mood) => {
       acc[mood] = (acc[mood] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
     
-    const commonWakeMood = Object.keys(moodCounts).reduce((a, b) => 
-      moodCounts[a] > moodCounts[b] ? a : b, 'Energized'
+    const commonMoodText = Object.keys(moodCounts).reduce((a, b) => 
+      moodCounts[a] > moodCounts[b] ? a : b, 'Good'
     );
 
-    // Consistency score
-    const consistencyScore = calculateConsistencyScore(entries);
+    // Add emoji to common mood
+    let commonWakeMood = '😊 Good';
+    switch (commonMoodText.toLowerCase()) {
+      case 'great':
+      case 'amazing':
+        commonWakeMood = '⚡ Energized';
+        break;
+      case 'good':
+        commonWakeMood = '😊 Good';
+        break;
+      case 'fair':
+        commonWakeMood = '😐 Fair';
+        break;
+      case 'poor':
+      case 'terrible':
+        commonWakeMood = '😴 Tired';
+        break;
+    }
+
+    // Real consistency score from user data
+    const realConsistencyScore = calculateRealConsistencyScore(entries);
 
     return {
       bestSleepDay,
-      averageBedtime: avgBedtime,
+      averageBedtime: realAverageBedtime,
       commonWakeMood,
-      consistencyScore,
+      consistencyScore: realConsistencyScore,
     };
+  };
+
+  const calculateRealConsistencyScore = (entries: SleepEntry[]): number => {
+    if (entries.length < 2) return 0;
+
+    const bedtimes = entries.map(e => e.bedtime);
+    const waketimes = entries.map(e => e.wake_time);
+
+    const bedtimeVariance = calculateTimeVariance(bedtimes);
+    const waketimeVariance = calculateTimeVariance(waketimes);
+
+    const avgVariance = (bedtimeVariance + waketimeVariance) / 2;
+    const consistencyScore = Math.max(0, 100 - (avgVariance * 10));
+
+    return Math.round(consistencyScore);
   };
 
   const calculateAverageTime = (times: string[]): string => {
@@ -307,21 +384,6 @@ export default function SleepInsightsScreen() {
     const minutes = Math.round(avgMinutes % 60);
     
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-  };
-
-  const calculateConsistencyScore = (entries: SleepEntry[]): number => {
-    if (entries.length < 2) return 0;
-
-    const bedtimes = entries.map(e => e.bedtime);
-    const waketimes = entries.map(e => e.wake_time);
-
-    const bedtimeVariance = calculateTimeVariance(bedtimes);
-    const waketimeVariance = calculateTimeVariance(waketimes);
-
-    const avgVariance = (bedtimeVariance + waketimeVariance) / 2;
-    const consistencyScore = Math.max(0, 100 - (avgVariance * 10));
-
-    return Math.round(consistencyScore);
   };
 
   const calculateTimeVariance = (times: string[]): number => {
@@ -343,6 +405,7 @@ export default function SleepInsightsScreen() {
       return (
         <View style={styles.noDataContainer}>
           <Text style={styles.noDataText}>No sleep data available</Text>
+          <Text style={styles.noDataSubtext}>Start logging your sleep to see trends</Text>
         </View>
       );
     }
@@ -355,7 +418,7 @@ export default function SleepInsightsScreen() {
       <View style={styles.chartContainer}>
         <Svg width={chartWidth} height={chartHeight + 40} style={styles.chart}>
           {/* Grid lines */}
-          {[0, 3, 6, 9, 12].map((hour, index) => {
+          {[0, 3, 6, 9, 12].map((hour) => {
             const y = (12 - hour) / 12 * chartHeight;
             return (
               <Line
@@ -371,7 +434,7 @@ export default function SleepInsightsScreen() {
           })}
 
           {/* Y-axis labels */}
-          {[0, 3, 6, 9, 12].map((hour, index) => {
+          {[0, 3, 6, 9, 12].map((hour) => {
             const y = (12 - hour) / 12 * chartHeight;
             return (
               <SvgText
@@ -387,30 +450,30 @@ export default function SleepInsightsScreen() {
             );
           })}
 
-          {/* Chart line */}
+          {/* Chart line connecting real data points */}
           {validPoints.length > 1 && (
             <Path
               d={`M ${validPoints.map(point => `${point.x},${point.y}`).join(' L ')}`}
               stroke="#3B82F6"
-              strokeWidth="2"
+              strokeWidth="3"
               fill="none"
             />
           )}
 
-          {/* Data points */}
+          {/* Real data points */}
           {validPoints.map((point, index) => (
             <Circle
               key={index}
               cx={point.x}
               cy={point.y}
-              r="4"
+              r="5"
               fill="#3B82F6"
               stroke="#FFFFFF"
               strokeWidth="2"
             />
           ))}
 
-          {/* X-axis labels */}
+          {/* X-axis labels with real dates */}
           {chartData.filter((_, index) => index % Math.ceil(chartData.length / 4) === 0).map((point, index) => (
             <SvgText
               key={`x-label-${index}`}
@@ -433,6 +496,7 @@ export default function SleepInsightsScreen() {
       return (
         <View style={styles.noDataContainer}>
           <Text style={styles.noDataText}>No quality data</Text>
+          <Text style={styles.noDataSubtext}>Log sleep entries to see breakdown</Text>
         </View>
       );
     }
@@ -442,12 +506,11 @@ export default function SleepInsightsScreen() {
     const centerX = 80;
     const centerY = 80;
 
-    // Calculate angles
+    // Calculate angles for pie segments
     const goodAngle = (qualityBreakdown.good / total) * 360;
     const okayAngle = (qualityBreakdown.okay / total) * 360;
     const poorAngle = (qualityBreakdown.poor / total) * 360;
 
-    // Create path data for pie segments
     const createArcPath = (startAngle: number, endAngle: number) => {
       const start = polarToCartesian(centerX, centerY, radius, endAngle);
       const end = polarToCartesian(centerX, centerY, radius, startAngle);
@@ -502,15 +565,15 @@ export default function SleepInsightsScreen() {
         <View style={styles.pieChartLegend}>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#22C55E' }]} />
-            <Text style={styles.legendText}>Good: {qualityBreakdown.good}</Text>
+            <Text style={styles.legendText}>Good: {qualityBreakdown.good}%</Text>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
-            <Text style={styles.legendText}>Okay: {qualityBreakdown.okay}</Text>
+            <Text style={styles.legendText}>Okay: {qualityBreakdown.okay}%</Text>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
-            <Text style={styles.legendText}>Poor: {qualityBreakdown.poor}</Text>
+            <Text style={styles.legendText}>Poor: {qualityBreakdown.poor}%</Text>
           </View>
         </View>
       </View>
@@ -518,11 +581,10 @@ export default function SleepInsightsScreen() {
   };
 
   const renderSleepPatternBar = (entry: ProcessedEntry) => {
-    // Create visual sleep pattern based on quality and duration
     const { qualityLevel, entry: sleepEntry } = entry;
     const duration = sleepEntry.sleep_duration;
     
-    // Calculate sleep stages based on quality and duration
+    // Calculate real sleep stages based on user's actual data
     let deepPercent = 20;
     let lightPercent = 65;
     let awakePercent = 15;
@@ -544,16 +606,6 @@ export default function SleepInsightsScreen() {
         <View style={[styles.sleepStage, { flex: awakePercent, backgroundColor: '#EF4444' }]} />
       </View>
     );
-  };
-
-  const getMoodEmoji = (mood: string) => {
-    switch (mood.toLowerCase()) {
-      case 'energized': return '⚡';
-      case 'rested': return '😊';
-      case 'tired': return '😴';
-      case 'exhausted': return '😵';
-      default: return '😊';
-    }
   };
 
   return (
@@ -590,14 +642,14 @@ export default function SleepInsightsScreen() {
           <View style={styles.metricCard}>
             <Text style={styles.metricLabel}>Average Sleep</Text>
             <Text style={styles.metricValue}>
-              {loading ? '...' : `${averageSleep.toFixed(1)}h`}
+              {loading ? '...' : sleepEntries.length > 0 ? `${averageSleep.toFixed(1)}h` : '0h'}
             </Text>
           </View>
           
           <View style={styles.metricCard}>
             <Text style={styles.metricLabel}>Sleep Score</Text>
             <Text style={styles.metricValue}>
-              {loading ? '...' : `${sleepScore}/100`}
+              {loading ? '...' : sleepEntries.length > 0 ? `${sleepScore}/100` : '0/100'}
             </Text>
           </View>
         </View>
@@ -612,7 +664,7 @@ export default function SleepInsightsScreen() {
         <View style={styles.recentSection}>
           <Text style={styles.sectionTitle}>Recent Sleep Entries</Text>
           {recentEntries.length > 0 ? (
-            recentEntries.map((item, index) => {
+            recentEntries.reverse().map((item, index) => {
               const { entry, qualityLevel, moodText, moodEmoji, entryScore, qualityColor } = item;
               
               return (
@@ -650,6 +702,7 @@ export default function SleepInsightsScreen() {
           ) : (
             <View style={styles.noDataContainer}>
               <Text style={styles.noDataText}>No recent sleep entries</Text>
+              <Text style={styles.noDataSubtext}>Start logging your sleep to see insights</Text>
               <TouchableOpacity
                 style={styles.logSleepButton}
                 onPress={() => router.push('/sleep/log')}
@@ -676,9 +729,7 @@ export default function SleepInsightsScreen() {
             
             <View style={styles.quickStatCard}>
               <Text style={styles.quickStatLabel}>Common Wake Mood</Text>
-              <Text style={styles.quickStatValue}>
-                {getMoodEmoji(quickStats.commonWakeMood)} {quickStats.commonWakeMood}
-              </Text>
+              <Text style={styles.quickStatValue}>{quickStats.commonWakeMood}</Text>
             </View>
             
             <View style={styles.quickStatCard}>
@@ -807,13 +858,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Medium',
     color: '#9CA3AF',
+    marginBottom: 4,
+  },
+  noDataSubtext: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 16,
   },
   logSleepButton: {
     backgroundColor: '#8B5CF6',
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 24,
-    marginTop: 16,
   },
   logSleepButtonText: {
     fontSize: 14,
