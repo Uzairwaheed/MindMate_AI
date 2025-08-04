@@ -34,9 +34,12 @@ class MoodService {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No authenticated user');
 
+      // Convert mood score from 1-10 scale to 1-5 scale for database
+      const dbMoodScore = Math.ceil(entryData.moodScore / 2);
+
       const insertData: MoodEntryInsert = {
         user_id: user.id,
-        mood_score: entryData.moodScore,
+        mood_score: dbMoodScore,
         emotions: entryData.emotions || [],
         notes: entryData.notes || '',
         entry_date: entryData.entryDate || new Date().toISOString().split('T')[0],
