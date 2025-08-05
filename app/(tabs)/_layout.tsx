@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Chrome as Home, MessageCircle, Heart, Brain } from 'lucide-react-native';
+import { Chrome as Home, MessageCircle, Heart, Brain, Moon } from 'lucide-react-native';
 
 export default function TabLayout() {
   return (
@@ -56,6 +56,15 @@ export default function TabLayout() {
           title: 'Wellness',
           tabBarIcon: ({ size, color }) => (
             <Brain size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="sleep"
+        options={{
+          title: 'Sleep',
+          tabBarIcon: ({ size, color }) => (
+            <Moon size={size} color={color} />
           ),
         }}
       />

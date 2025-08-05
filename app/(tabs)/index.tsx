@@ -152,13 +152,14 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        <TouchableOpacity 
+        {/* Settings temporarily disabled */}
+        {/* <TouchableOpacity 
           style={styles.settingsButton}
           onPress={() => router.push('/settings')}
         >
           <Settings size={20} color="#6B7280" />
           <Text style={styles.settingsText}>Settings & Notifications</Text>
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </ScrollView>
     </LinearGradient>
   );
