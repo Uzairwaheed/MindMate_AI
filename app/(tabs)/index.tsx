@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { ChevronLeft, Plus, TrendingUp, TrendingDown, Minus, Calendar, CreditCard as Edit, Trash2, X, Check, BookOpen } from 'lucide-react-native';
-import { moodService, ParsedMoodEntry, UpdateMoodEntryData } from '@/services/moodService';
-import { moodService, ParsedMoodEntry, UpdateMoodEntryData } from '@/services/moodService';
+import { ChevronLeft, Plus, Minus, Calendar, CreditCard as Edit, Trash2, X, Check, BookOpen } from 'lucide-react-native';
 
 export default function MoodTrackingScreen() {
   const [moodStats, setMoodStats] = useState({
