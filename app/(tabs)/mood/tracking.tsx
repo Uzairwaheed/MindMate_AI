@@ -255,9 +255,9 @@ export default function MoodTrackingScreen() {
       case 'improving':
         return <Plus size={16} color="#10B981" />;
       case 'declining':
-        return <Minus size={16} color="#EF4444" />;
+        return <TrendingDown size={16} color="#EF4444" />;
       default:
-        return <Minus size={16} color="#6B7280" style={{ transform: [{ rotate: '90deg' }] }} />;
+        return <Minus size={16} color="#6B7280" />;
     }
   };
 
