@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { ChevronLeft, Plus, Minus, Calendar, CreditCard as Edit, Trash2, X, Check, BookOpen } from 'lucide-react-native';
+import { ChevronLeft, Plus, TrendingUp, Calendar, CreditCard as Edit, Trash2, X, Check, BookOpen } from 'lucide-react-native';
 import { moodService, ParsedMoodEntry, UpdateMoodEntryData } from '@/services/moodService';
 
 export default function MoodTrackingScreen() {
@@ -102,149 +102,128 @@ export default function MoodTrackingScreen() {
   };
 
   const renderChart = () => {
-    if (chartData.length === 0) {
-      return (
-        <View style={styles.noDataContainer}>
-          <Text style={styles.noDataText}>No mood data available</Text>
-          <Text style={styles.noDataSubtext}>Start logging your mood to see trends</Text>
-        </View>
-      );
-    }
-
-    const chartHeight = 140;
-    const chartWidth = 300;
-    const padding = 40;
+    const maxValue = 10;
+    const chartHeight = 120;
+    const chartWidth = 280;
     
     return (
       <View style={styles.chartContainer}>
-        {/* Chart area */}
         <View style={styles.chartArea}>
           {/* Y-axis labels */}
-          <View style={styles.yAxisLabels}>
-            {[10, 8, 6, 4, 2].map(value => (
+          <View style={styles.yAxis}>
+            {[10, 7, 4, 1].map(value => (
               <Text key={value} style={styles.yAxisLabel}>{value}</Text>
             ))}
           </View>
           
-          {/* Grid lines */}
-          {[10, 8, 6, 4, 2].map(value => (
-            <View 
-              key={value} 
-              style={[
-                styles.gridLine, 
-                { top: ((10 - value) / 10) * chartHeight }
-              ]} 
-            />
-          ))}
-          
           {/* Chart content */}
           <View style={styles.chartContent}>
+            {/* Grid lines */}
+            <View style={styles.chartGrid}>
+              {[10, 7, 4, 1].map(value => (
+                <View key={value} style={styles.gridLine} />
+              ))}
+            </View>
+            
             {/* Data points and lines */}
-            {chartData.map((point, index) => {
-              const x = (index / Math.max(chartData.length - 1, 1)) * (chartWidth - 40);
-              
-              const metrics = [
-                { key: 'mood', value: point.mood, color: '#3B82F6' },
-                { key: 'energy', value: point.energy, color: '#10B981' },
-                { key: 'calm', value: point.calm, color: '#F59E0B' },
-                { key: 'relaxed', value: point.relaxed, color: '#EF4444' },
-              ];
+            <View style={styles.dataContainer}>
+              {chartData.map((point, index) => {
+                const x = (index / (chartData.length - 1)) * 100;
+                
+                // Render data points for each metric
+                const metrics = [
+                  { key: 'mood', color: '#3B82F6', value: point.mood },
+                  { key: 'energy', color: '#10B981', value: point.energy },
+                  { key: 'calm', color: '#F59E0B', value: point.calm },
+                  { key: 'relaxed', color: '#EF4444', value: point.relaxed },
+                ];
 
-              return metrics.map((metric, metricIndex) => {
-                if (metric.value === null || metric.value === undefined) return null;
-                
-                const y = ((10 - metric.value) / 10) * chartHeight;
-                
-                return (
-                  <View key={`${index}-${metric.key}`} style={styles.dataPointContainer}>
-                    {/* Data point */}
-                    <View 
-                      style={[
-                        styles.dataPoint,
-                        { 
-                          left: x + 20,
-                          top: y,
-                          backgroundColor: metric.color,
-                        }
-                      ]} 
-                    />
-                    
-                    {/* Connect to next point */}
-                    {index < chartData.length - 1 && (() => {
-                      const nextPoint = chartData[index + 1];
-                      const nextValue = nextPoint[metric.key as keyof typeof nextPoint];
-                      
-                      if (nextValue === null || nextValue === undefined) return null;
-                      
-                      const x2 = ((index + 1) / Math.max(chartData.length - 1, 1)) * (chartWidth - 40);
-                      const y2 = ((10 - nextValue) / 10) * chartHeight;
-                      
-                      const deltaX = x2 - x;
-                      const deltaY = y2 - y;
-                      const length = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-                      const angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
-                      
-                      return (
-                        <View
-                          key={`line-${index}-${metric.key}`}
-                          style={[
-                            styles.chartLine,
-                            {
-                              left: x + 20,
-                              top: y,
-                              width: length,
-                              backgroundColor: metric.color,
-                              transform: [{ rotate: `${angle}deg` }],
-                            }
-                          ]}
-                        />
-                      );
-                    })()}
-                  </View>
-                );
-              }).filter(Boolean);
-            })}
+                return metrics.map(metric => {
+                  if (metric.value === null) return null;
+                  
+                  const y = ((maxValue - metric.value) / maxValue) * 100;
+                  
+                  return (
+                    <View key={`${index}-${metric.key}`}>
+                      <View 
+                        style={[
+                          styles.dataPoint,
+                          { 
+                            left: `${x}%`,
+                            top: `${y}%`,
+                            backgroundColor: metric.color
+                          }
+                        ]} 
+                      />
+                      {/* Draw line to next point */}
+                      {index < chartData.length - 1 && (
+                        (() => {
+                          const nextPoint = chartData[index + 1];
+                          const nextMetric = nextPoint[metric.key === 'mood' ? 'mood' : 
+                                                     metric.key === 'energy' ? 'energy' :
+                                                     metric.key === 'calm' ? 'calm' : 'relaxed'];
+                          
+                          if (nextMetric === null) return null;
+                          
+                          const x2 = ((index + 1) / (chartData.length - 1)) * 100;
+                          const y2 = ((maxValue - nextMetric) / maxValue) * 100;
+                          
+                          const lineLength = Math.sqrt(
+                            Math.pow((x2 - x) * chartWidth / 100, 2) + 
+                            Math.pow((y2 - y) * chartHeight / 100, 2)
+                          );
+                          const angle = Math.atan2((y2 - y) * chartHeight / 100, (x2 - x) * chartWidth / 100) * 180 / Math.PI;
+                          
+                          return (
+                            <View
+                              style={[
+                                styles.chartLine,
+                                {
+                                  left: `${x}%`,
+                                  top: `${y}%`,
+                                  width: lineLength,
+                                  backgroundColor: metric.color,
+                                  transform: [{ rotate: `${angle}deg` }],
+                                }
+                              ]}
+                            />
+                          );
+                        })()
+                      )}
+                    </View>
+                  );
+                }).filter(Boolean);
+              })}
+            </View>
           </View>
         </View>
         
         {/* X-axis labels */}
-        <View style={styles.xAxisContainer}>
-          {chartData.map((point, index) => {
-            // Show labels for first, middle, and last points
-            if (index !== 0 && index !== Math.floor(chartData.length / 2) && index !== chartData.length - 1) return null;
-            
-            return (
-              <Text key={index} style={styles.xAxisLabel}>
-                {point.date.toLocaleDateString('en-US', { 
-                  month: 'numeric', 
-                  day: 'numeric' 
-                })}
-              </Text>
-            );
-          })}
+        <View style={styles.xAxis}>
+          {chartData.map((point, index) => (
+            <Text key={index} style={styles.xAxisLabel}>
+              {point.date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}
+            </Text>
+          ))}
         </View>
         
         {/* Legend */}
-        <View style={styles.chartLegend}>
-          <View style={styles.legendRow}>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#3B82F6' }]} />
-              <Text style={styles.legendText}>Mood</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
-              <Text style={styles.legendText}>Energy</Text>
-            </View>
+        <View style={styles.legend}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#3B82F6' }]} />
+            <Text style={styles.legendText}>Mood</Text>
           </View>
-          <View style={styles.legendRow}>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
-              <Text style={styles.legendText}>Calm</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
-              <Text style={styles.legendText}>Relaxed</Text>
-            </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+            <Text style={styles.legendText}>Energy</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
+            <Text style={styles.legendText}>Calm</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
+            <Text style={styles.legendText}>Relaxed</Text>
           </View>
         </View>
       </View>
@@ -254,11 +233,11 @@ export default function MoodTrackingScreen() {
   const getTrendIcon = (trend: string) => {
     switch (trend) {
       case 'improving':
-        return <Plus size={16} color="#10B981" />;
+        return '📈';
       case 'declining':
-        return <TrendingDown size={16} color="#EF4444" />;
+        return '📉';
       default:
-        return <Minus size={16} color="#6B7280" />;
+        return '➡️';
     }
   };
 
@@ -299,6 +278,13 @@ export default function MoodTrackingScreen() {
             ]}
             onPressIn={(e) => {
               // Simple touch-based slider
+          <TouchableOpacity
+            style={styles.journalButton}
+            onPress={() => router.push('/mood/journal')}
+          >
+            <BookOpen size={16} color="#8B5CF6" />
+            <Text style={styles.journalButtonText}>Journal</Text>
+          </TouchableOpacity>
               const { locationX } = e.nativeEvent;
               const newValue = Math.round((locationX / 250) * 10);
               onValueChange(Math.max(1, Math.min(10, newValue)));
@@ -347,9 +333,7 @@ export default function MoodTrackingScreen() {
           </View>
           
           <View style={styles.statCard}>
-            <View style={styles.statIconContainer}>
-              {getTrendIcon(moodStats.trend)}
-            </View>
+            <Text style={styles.statEmoji}>{getTrendIcon(moodStats.trend)}</Text>
             <Text style={styles.statValue}>
               {loading ? '...' : (moodStats.trend || 'stable').charAt(0).toUpperCase() + (moodStats.trend || 'stable').slice(1)}
             </Text>
@@ -667,15 +651,6 @@ const styles = StyleSheet.create({
     fontSize: 32,
     marginBottom: 8,
   },
-  statIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F9FAFB',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
   statValue: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
@@ -706,130 +681,90 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   chartContainer: {
-    height: 240,
-    backgroundColor: '#FAFAFA',
-    borderRadius: 12,
-    padding: 16,
+    height: 200,
   },
-  yAxisContainer: {
+  chartArea: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-    paddingHorizontal: 8,
+    height: 120,
+    marginBottom: 12,
   },
-  yAxisLabels: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    height: 140,
+  yAxis: {
     width: 20,
     justifyContent: 'space-between',
-    paddingVertical: 4,
+    alignItems: 'flex-end',
+    paddingRight: 8,
   },
   yAxisLabel: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  chartArea: {
-    height: 160,
-    position: 'relative',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    marginBottom: 12,
-    paddingLeft: 20,
+    color: '#9CA3AF',
   },
   chartContent: {
+    flex: 1,
     position: 'relative',
-    height: 140,
-    width: 260,
-    marginLeft: 20,
   },
-  dataPointContainer: {
+  chartGrid: {
     position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'space-between',
   },
   gridLine: {
-    position: 'absolute',
-    left: 20,
-    right: 20,
     height: 1,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#F3F4F6',
+  },
+  dataContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   dataPoint: {
     position: 'absolute',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginLeft: -4,
-    marginTop: -4,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginLeft: -3,
+    marginTop: -3,
   },
   chartLine: {
     position: 'absolute',
-    height: 3,
+    height: 2,
     transformOrigin: 'left center',
-    borderRadius: 1.5,
   },
-  xAxisContainer: {
+  xAxis: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingLeft: 28,
     marginBottom: 16,
   },
   xAxisLabel: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    fontWeight: '500',
+    color: '#9CA3AF',
   },
-  chartLegend: {
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  legendRow: {
+  legend: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginBottom: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     marginRight: 6,
   },
   legendText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  noDataContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    backgroundColor: '#FAFAFA',
-    borderRadius: 12,
-  },
-  noDataText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#9CA3AF',
-    marginBottom: 4,
-  },
-  noDataSubtext: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
   },
