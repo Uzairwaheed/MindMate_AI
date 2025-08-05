@@ -100,7 +100,8 @@ export default function SignupScreen() {
             <View style={styles.dividerLine} />
           </View>
 
-          <TouchableOpacity
+          {/* Social Signup - Temporarily Disabled */}
+          {/* <TouchableOpacity
             style={styles.socialButton}
             onPress={() => handleSocialSignup('Google')}
           >
@@ -112,7 +113,7 @@ export default function SignupScreen() {
             onPress={() => handleSocialSignup('Facebook')}
           >
             <Text style={styles.socialButtonText}>Sign up with Facebook</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
 
         <View style={styles.footer}>

@@ -111,7 +111,8 @@ export default function LoginScreen() {
             <View style={styles.dividerLine} />
           </View>
 
-          <TouchableOpacity
+          {/* Social Login - Temporarily Disabled */}
+          {/* <TouchableOpacity
             style={styles.socialButton}
             onPress={() => handleSocialLogin('google')}
             disabled={loading}
@@ -125,7 +126,7 @@ export default function LoginScreen() {
             disabled={loading}
           >
             <Text style={styles.socialButtonText}>Continue with Facebook</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
 
         <View style={styles.footer}>

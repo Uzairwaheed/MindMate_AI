@@ -62,13 +62,13 @@ export default function DashboardScreen() {
       color: '#EF4444',
       route: '/mood',
     },
-    {
-      title: 'Sentiment Analysis',
-      description: 'Analyze your mood through photos',
-      icon: Camera,
-      color: '#10B981',
-      route: '/mood/sentiment',
-    },
+    // {
+    //   title: 'Sentiment Analysis',
+    //   description: 'Analyze your mood through photos',
+    //   icon: Camera,
+    //   color: '#10B981',
+    //   route: '/mood/sentiment',
+    // },
     {
       title: 'Wellness Quiz',
       description: 'Assess your mental health',
@@ -76,13 +76,13 @@ export default function DashboardScreen() {
       color: '#8B5CF6',
       route: '/wellness/quiz',
     },
-    {
-      title: 'Daily Journal',
-      description: 'Reflect on your thoughts',
-      icon: BookOpen,
-      color: '#F59E0B',
-      route: '/mood/journal',
-    },
+    // {
+    //   title: 'Daily Journal',
+    //   description: 'Reflect on your thoughts',
+    //   icon: BookOpen,
+    //   color: '#F59E0B',
+    //   route: '/mood/journal',
+    // },
     {
       title: 'Sleep Tracker',
       description: 'Monitor your sleep patterns',

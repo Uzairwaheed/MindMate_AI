@@ -20,13 +20,13 @@ export default function WellnessScreen() {
       color: '#3B82F6',
       route: '/wellness/breathing',
     },
-    {
-      title: 'Goals & Habits',
-      description: 'Track your wellness goals',
-      icon: Target,
-      color: '#10B981',
-      route: '/wellness/goals',
-    },
+    // {
+    //   title: 'Goals & Habits',
+    //   description: 'Track your wellness goals',
+    //   icon: Target,
+    //   color: '#10B981',
+    //   route: '/wellness/goals',
+    // },
     {
       title: 'Therapy Resources',
       description: 'Find professional support',

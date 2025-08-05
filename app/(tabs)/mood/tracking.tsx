@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { ChevronLeft, Plus, TrendingUp, Calendar, CreditCard as Edit, Trash2, X, Check } from 'lucide-react-native';
+import { ChevronLeft, Plus, TrendingUp, Calendar, CreditCard as Edit, Trash2, X, Check, BookOpen } from 'lucide-react-native';
 import { moodService, ParsedMoodEntry, UpdateMoodEntryData } from '@/services/moodService';
 
 export default function MoodTrackingScreen() {
@@ -278,6 +278,13 @@ export default function MoodTrackingScreen() {
             ]}
             onPressIn={(e) => {
               // Simple touch-based slider
+          <TouchableOpacity
+            style={styles.journalButton}
+            onPress={() => router.push('/mood/journal')}
+          >
+            <BookOpen size={16} color="#8B5CF6" />
+            <Text style={styles.journalButtonText}>Journal</Text>
+          </TouchableOpacity>
               const { locationX } = e.nativeEvent;
               const newValue = Math.round((locationX / 250) * 10);
               onValueChange(Math.max(1, Math.min(10, newValue)));
@@ -601,6 +608,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
+    marginLeft: 4,
+  },
+  journalButton: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#8B5CF6',
+  },
+  journalButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#8B5CF6',
     marginLeft: 4,
   },
   scrollView: {
