@@ -35,10 +35,11 @@ export default function DashboardScreen() {
   const loadDashboardData = async () => {
     try {
       const analytics = await journalService.getMoodAnalytics();
+      const moodAnalytics = await moodService.getMoodAnalytics();
       setMoodData({
-        weeklyAverage: analytics.weeklyAverage,
-        trend: analytics.trend,
-        totalEntries: analytics.totalEntries,
+        weeklyAverage: moodAnalytics.averageMood,
+        trend: moodAnalytics.weeklyTrend === 'improving' ? 1 : moodAnalytics.weeklyTrend === 'declining' ? -1 : 0,
+        totalEntries: moodAnalytics.totalEntries,
       });
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
@@ -123,12 +124,18 @@ export default function DashboardScreen() {
             <Text style={styles.moodDescription}>
               {loading 
                 ? 'Loading your mood data...' 
-                : moodData.weeklyAverage >= 7 
+                : moodData.weeklyAverage >= 8 
                   ? "You're doing great! Keep up the positive momentum."
-                  : moodData.weeklyAverage >= 5
+                  : moodData.weeklyAverage >= 6
                     ? "You're managing well. Consider some self-care activities."
                     : "Take care of yourself. Consider reaching out for support."
               }
+            </Text>
+            <Text style={styles.moodEmoji}>
+              {loading ? '😐' : 
+               moodData.weeklyAverage >= 8 ? '😊' :
+               moodData.weeklyAverage >= 6 ? '🙂' :
+               moodData.weeklyAverage <= 3 ? '😞' : '😐'}
             </Text>
           </LinearGradient>
         </View>
@@ -237,6 +244,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     opacity: 0.9,
     lineHeight: 20,
+  },
+  moodEmoji: {
+    fontSize: 24,
+    textAlign: 'center',
+    marginTop: 8,
   },
   featuresContainer: {
     marginBottom: 32,

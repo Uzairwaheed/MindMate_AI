@@ -10,15 +10,9 @@ export default function MoodLogScreen() {
   const [anxiety, setAnxiety] = useState(3);
   const [stress, setStress] = useState(4);
   const [sleep, setSleep] = useState(7);
-  const [selectedActivities, setSelectedActivities] = useState<string[]>([]);
+  const [dailyActivities, setDailyActivities] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const activities = [
-    'Exercise', 'Meditation', 'Social time', 'Work',
-    'Sleep well', 'Outdoor time', 'Creative activity', 'Reading',
-    'Music', 'Therapy'
-  ];
 
   const moodOptions = [
     { emoji: '😢', label: 'Very Low', value: 1 },
@@ -33,14 +27,6 @@ export default function MoodLogScreen() {
     { emoji: '😍', label: 'Excellent', value: 10 },
   ];
 
-  const toggleActivity = (activity: string) => {
-    setSelectedActivities(prev => 
-      prev.includes(activity)
-        ? prev.filter(a => a !== activity)
-        : [...prev, activity]
-    );
-  };
-
   const handleSaveEntry = async () => {
     setLoading(true);
     try {
@@ -50,7 +36,7 @@ export default function MoodLogScreen() {
         anxietyLevel: anxiety,
         stressLevel: stress,
         sleepQuality: sleep,
-        emotions: selectedActivities,
+        dailyActivities: dailyActivities,
         notes: notes.trim(),
       });
 
@@ -66,22 +52,6 @@ export default function MoodLogScreen() {
     }
   };
 
-  const createSlider = (value: number, setValue: (value: number) => void, color: string = '#8B5CF6') => {
-    const panResponder = PanResponder.create({
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {},
-      onPanResponderMove: (evt, gestureState) => {
-        const sliderWidth = 250;
-        const newX = Math.max(0, Math.min(sliderWidth, gestureState.moveX - 50)); // Adjust for container offset
-        const newValue = Math.round((newX / sliderWidth) * 10);
-        setValue(Math.max(1, Math.min(10, newValue)));
-      },
-      onPanResponderRelease: () => {},
-    });
-
-    return panResponder;
-  };
-
   const renderSlider = (
     label: string,
     value: number,
@@ -91,7 +61,6 @@ export default function MoodLogScreen() {
     highLabel: string,
     color: string = '#8B5CF6'
   ) => {
-    const panResponder = createSlider(value, setValue, color);
     
     return (
       <View style={styles.sliderSection}>
@@ -99,10 +68,17 @@ export default function MoodLogScreen() {
           <Text style={styles.sliderLabel}>{label} {emoji}</Text>
           <Text style={[styles.sliderValue, { color }]}>{value}/10</Text>
         </View>
-        <View style={styles.sliderContainer} {...panResponder.panHandlers}>
+        <View style={styles.sliderContainer}>
           <View style={styles.slider}>
             <View style={[styles.sliderTrack, { backgroundColor: color, width: `${(value / 10) * 100}%` }]} />
-            <View style={[styles.sliderThumb, { backgroundColor: color, left: `${(value / 10) * 100 - 2}%` }]} />
+            <TouchableOpacity 
+              style={[styles.sliderThumb, { backgroundColor: color, left: `${(value / 10) * 100 - 2}%` }]}
+              onPressIn={(e) => {
+                const { locationX } = e.nativeEvent;
+                const newValue = Math.round((locationX / 280) * 10); // Full width slider
+                setValue(Math.max(1, Math.min(10, newValue)));
+              }}
+            />
           </View>
           <View style={styles.sliderLabels}>
             <Text style={styles.sliderLabelText}>😢 {lowLabel}</Text>
@@ -133,7 +109,7 @@ export default function MoodLogScreen() {
           {/* Mood Selector */}
           <View style={styles.moodSection}>
             <Text style={styles.moodLabel}>Mood 😊</Text>
-            <View style={styles.moodSliderContainer} {...createSlider(mood, setMood).panHandlers}>
+            <View style={styles.moodSliderContainer}>
               <View style={styles.moodSlider}>
                 <View 
                   style={[
@@ -141,7 +117,12 @@ export default function MoodLogScreen() {
                     { width: `${(mood / 10) * 100}%` }
                   ]} 
                 />
-                <View
+                <TouchableOpacity
+                  onPressIn={(e) => {
+                    const { locationX } = e.nativeEvent;
+                    const newValue = Math.round((locationX / 280) * 10);
+                    setMood(Math.max(1, Math.min(10, newValue)));
+                  }}
                   style={[
                     styles.moodSliderThumb,
                     { left: `${(mood / 10) * 100 - 2}%` }
@@ -164,26 +145,17 @@ export default function MoodLogScreen() {
         </View>
 
         <View style={styles.activitiesSection}>
-          <Text style={styles.activitiesTitle}>Activities Today</Text>
-          <View style={styles.activitiesGrid}>
-            {activities.map((activity) => (
-              <TouchableOpacity
-                key={activity}
-                style={[
-                  styles.activityButton,
-                  selectedActivities.includes(activity) && styles.activityButtonSelected
-                ]}
-                onPress={() => toggleActivity(activity)}
-              >
-                <Text style={[
-                  styles.activityText,
-                  selectedActivities.includes(activity) && styles.activityTextSelected
-                ]}>
-                  {activity}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <Text style={styles.activitiesTitle}>Daily Activities</Text>
+          <TextInput
+            style={styles.activitiesInput}
+            value={dailyActivities}
+            onChangeText={setDailyActivities}
+            placeholder="What did you do today? (e.g., Exercise, Work, Social time...)"
+            placeholderTextColor="#9CA3AF"
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+          />
         </View>
 
         <View style={styles.notesSection}>
@@ -349,7 +321,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     position: 'relative',
     marginBottom: 12,
-    width: 250,
+    width: '100%', // Full width slider
   },
   sliderTrack: {
     height: '100%',
@@ -396,31 +368,17 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     marginBottom: 16,
   },
-  activitiesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  activityButton: {
+  activitiesInput: {
     backgroundColor: '#F9FAFB',
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    borderRadius: 8,
+    padding: 16,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#1F2937',
     borderWidth: 1,
     borderColor: '#E5E7EB',
-  },
-  activityButtonSelected: {
-    backgroundColor: '#8B5CF615',
-    borderColor: '#8B5CF6',
-  },
-  activityText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  activityTextSelected: {
-    color: '#8B5CF6',
-    fontFamily: 'Inter-Medium',
+    height: 80,
+    textAlignVertical: 'top',
   },
   notesSection: {
     backgroundColor: '#FFFFFF',

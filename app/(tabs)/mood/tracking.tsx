@@ -134,8 +134,8 @@ export default function MoodTrackingScreen() {
                 const metrics = [
                   { key: 'mood', color: '#3B82F6', value: point.mood },
                   { key: 'energy', color: '#10B981', value: point.energy },
-                  { key: 'calm', color: '#F59E0B', value: point.calm },
-                  { key: 'relaxed', color: '#EF4444', value: point.relaxed },
+                  { key: 'anxiety', color: '#F59E0B', value: point.anxiety },
+                  { key: 'stress', color: '#EF4444', value: point.stress },
                 ];
 
                 return metrics.map(metric => {
@@ -161,7 +161,7 @@ export default function MoodTrackingScreen() {
                           const nextPoint = chartData[index + 1];
                           const nextMetric = nextPoint[metric.key === 'mood' ? 'mood' : 
                                                      metric.key === 'energy' ? 'energy' :
-                                                     metric.key === 'calm' ? 'calm' : 'relaxed'];
+                                                     metric.key === 'anxiety' ? 'anxiety' : 'stress'];
                           
                           if (nextMetric === null) return null;
                           
@@ -219,11 +219,11 @@ export default function MoodTrackingScreen() {
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
-            <Text style={styles.legendText}>Calm</Text>
+            <Text style={styles.legendText}>Anxiety</Text>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
-            <Text style={styles.legendText}>Relaxed</Text>
+            <Text style={styles.legendText}>Stress</Text>
           </View>
         </View>
       </View>
@@ -367,8 +367,13 @@ export default function MoodTrackingScreen() {
                   </Text>
                 </View>
                 <Text style={styles.recentEntryDetails}>
-                  Mood: {entry.parsed.moodScore}/10 • Energy: {entry.parsed.energyLevel}/10 • Anxiety: {entry.parsed.anxietyLevel}/10
+                  Mood: {entry.parsed.moodScore}/10 • Energy: {entry.parsed.energyLevel}/10 • Stress: {entry.parsed.stressLevel}/10
                 </Text>
+                {entry.parsed.dailyActivities && (
+                  <Text style={styles.recentEntryActivities} numberOfLines={1}>
+                    Activities: {entry.parsed.dailyActivities}
+                  </Text>
+                )}
                 {entry.parsed.userNotes && (
                   <Text style={styles.recentEntryNotes} numberOfLines={1}>
                     "{entry.parsed.userNotes}"
@@ -797,6 +802,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#9CA3AF',
     fontStyle: 'italic',
+  },
+  recentEntryActivities: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 2,
   },
   emptyState: {
     alignItems: 'center',

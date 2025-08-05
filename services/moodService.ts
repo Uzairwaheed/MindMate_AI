@@ -28,7 +28,7 @@ interface CreateMoodEntryData {
   anxietyLevel: number;
   stressLevel: number;
   sleepQuality: number;
-  emotions?: string[];
+  dailyActivities?: string;
   notes?: string;
   entryDate?: string;
   entryTime?: string;
@@ -40,7 +40,7 @@ export interface UpdateMoodEntryData {
   anxietyLevel?: number;
   stressLevel?: number;
   sleepQuality?: number;
-  emotions?: string[];
+  dailyActivities?: string;
   notes?: string;
   entryDate?: string;
   entryTime?: string;
@@ -55,6 +55,7 @@ class MoodService {
     if (data.anxietyLevel !== undefined) parts.push(`Anxiety: ${data.anxietyLevel}`);
     if (data.stressLevel !== undefined) parts.push(`Stress: ${data.stressLevel}`);
     if (data.sleepQuality !== undefined) parts.push(`Sleep: ${data.sleepQuality}`);
+    if (data.dailyActivities && data.dailyActivities.trim()) parts.push(`Activities: ${data.dailyActivities.trim()}`);
     
     if (data.notes && data.notes.trim()) {
       parts.push(`Notes: ${data.notes.trim()}`);
@@ -70,6 +71,7 @@ class MoodService {
       anxietyLevel: 5,
       stressLevel: 5,
       sleepQuality: 5,
+      dailyActivities: '',
       userNotes: '',
     };
 
@@ -79,6 +81,7 @@ class MoodService {
       const anxietyMatch = entry.notes.match(/Anxiety:\s*(\d+)/);
       const stressMatch = entry.notes.match(/Stress:\s*(\d+)/);
       const sleepMatch = entry.notes.match(/Sleep:\s*(\d+)/);
+      const activitiesMatch = entry.notes.match(/Activities:\s*(.+?)(?:\s*\||$)/);
       const notesMatch = entry.notes.match(/Notes:\s*(.+?)(?:\s*\||$)/);
 
       if (moodMatch) parsed.moodScore = parseInt(moodMatch[1]);
@@ -86,6 +89,7 @@ class MoodService {
       if (anxietyMatch) parsed.anxietyLevel = parseInt(anxietyMatch[1]);
       if (stressMatch) parsed.stressLevel = parseInt(stressMatch[1]);
       if (sleepMatch) parsed.sleepQuality = parseInt(sleepMatch[1]);
+      if (activitiesMatch) parsed.dailyActivities = activitiesMatch[1].trim();
       if (notesMatch) parsed.userNotes = notesMatch[1].trim();
     }
 
@@ -113,7 +117,7 @@ class MoodService {
         .insert({
           user_id: user.id,
           mood_score: moodScore,
-          emotions: entryData.emotions || [],
+          emotions: entryData.dailyActivities ? [entryData.dailyActivities] : [],
           notes: formattedNotes,
           entry_date: entryData.entryDate || new Date().toISOString().split('T')[0],
           entry_time: entryData.entryTime || new Date().toTimeString().split(' ')[0],
@@ -180,8 +184,8 @@ class MoodService {
         updatePayload.mood_score = Math.ceil(updateData.moodScore / 2);
       }
 
-      if (updateData.emotions !== undefined) {
-        updatePayload.emotions = updateData.emotions;
+      if (updateData.dailyActivities !== undefined) {
+        updatePayload.emotions = updateData.dailyActivities ? [updateData.dailyActivities] : [];
       }
 
       if (updateData.entryDate !== undefined) {
@@ -309,8 +313,12 @@ class MoodService {
 
   async getMoodAnalytics(days: number = 7): Promise<{
     averageMood: number;
+    averageEnergy: number;
+    averageAnxiety: number;
+    averageStress: number;
     weeklyTrend: 'improving' | 'declining' | 'stable';
     totalEntries: number;
+    moodEmoji: string;
   }> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -350,6 +358,9 @@ class MoodService {
       // Calculate average mood using parsed values
       const parsedEntries = entries.map(entry => this._parseMoodEntryNotes(entry));
       const averageMood = parsedEntries.reduce((sum, entry) => sum + entry.parsed.moodScore, 0) / parsedEntries.length;
+      const averageEnergy = parsedEntries.reduce((sum, entry) => sum + entry.parsed.energyLevel, 0) / parsedEntries.length;
+      const averageAnxiety = parsedEntries.reduce((sum, entry) => sum + entry.parsed.anxietyLevel, 0) / parsedEntries.length;
+      const averageStress = parsedEntries.reduce((sum, entry) => sum + entry.parsed.stressLevel, 0) / parsedEntries.length;
 
       // Get previous period for trend comparison
       const previousStartDate = new Date(startDate);
@@ -378,17 +389,31 @@ class MoodService {
         }
       }
 
+      // Determine mood emoji
+      let moodEmoji = '😐';
+      if (averageMood >= 8) moodEmoji = '😊';
+      else if (averageMood >= 6) moodEmoji = '🙂';
+      else if (averageMood <= 3) moodEmoji = '😞';
+
       return {
         averageMood: Math.round(averageMood * 10) / 10,
+        averageEnergy: Math.round(averageEnergy * 10) / 10,
+        averageAnxiety: Math.round(averageAnxiety * 10) / 10,
+        averageStress: Math.round(averageStress * 10) / 10,
         weeklyTrend,
         totalEntries: entries.length,
+        moodEmoji,
       };
     } catch (error) {
       console.error('Fetch mood analytics error:', error);
       return {
         averageMood: 0,
+        averageEnergy: 0,
+        averageAnxiety: 0,
+        averageStress: 0,
         weeklyTrend: 'stable',
         totalEntries: 0,
+        moodEmoji: '😐',
       };
     }
   }
@@ -441,16 +466,18 @@ class MoodService {
             date: date,
             mood: parsed.parsed.moodScore,
             energy: parsed.parsed.energyLevel,
-            calm: 11 - parsed.parsed.anxietyLevel, // Invert anxiety to calm
-            relaxed: 11 - parsed.parsed.stressLevel, // Invert stress to relaxed
+            anxiety: parsed.parsed.anxietyLevel,
+            stress: parsed.parsed.stressLevel,
+            sleep: parsed.parsed.sleepQuality,
           });
         } else {
           chartPoints.push({
             date: date,
             mood: null,
             energy: null,
-            calm: null,
-            relaxed: null,
+            anxiety: null,
+            stress: null,
+            sleep: null,
           });
         }
       }
