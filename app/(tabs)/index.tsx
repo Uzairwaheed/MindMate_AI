@@ -1,15 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { ChevronLeft, Plus, Minus, Calendar, CreditCard as Edit, Trash2, X, Check, BookOpen } from 'lucide-react-native';
-        {/* Settings temporarily hidden */}
-        {/* <TouchableOpacity 
-          style={styles.settingsButton}
-          onPress={() => router.push('/settings')}
-        >
-          <Settings size={20} color="#6B7280" />
-          <Text style={styles.settingsText}>Settings & Notifications</Text>
-        </TouchableOpacity> */}
+import { ChevronLeft, Plus, TrendingUp, TrendingDown, Minus, Calendar, CreditCard as Edit, Trash2, X, Check, BookOpen } from 'lucide-react-native';
+import { moodService, ParsedMoodEntry, UpdateMoodEntryData } from '@/services/moodService';
+import { moodService, ParsedMoodEntry, UpdateMoodEntryData } from '@/services/moodService';
 
 export default function MoodTrackingScreen() {
   const [moodStats, setMoodStats] = useState({
@@ -262,9 +256,9 @@ export default function MoodTrackingScreen() {
       case 'improving':
         return <Plus size={16} color="#10B981" />;
       case 'declining':
-        return <Minus size={16} color="#EF4444" />;
+        return <TrendingDown size={16} color="#EF4444" />;
       default:
-        return <Minus size={16} color="#6B7280" style={{ transform: [{ rotate: '90deg' }] }} />;
+        return <Minus size={16} color="#6B7280" />;
     }
   };
 

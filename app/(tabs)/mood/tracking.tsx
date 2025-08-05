@@ -117,100 +117,101 @@ export default function MoodTrackingScreen() {
     
     return (
       <View style={styles.chartContainer}>
-        {/* Y-axis labels */}
-        <View style={styles.yAxisContainer}>
-          {[10, 8, 6, 4, 2].map(value => (
-            <Text key={value} style={styles.yAxisLabel}>{value}</Text>
-          ))}
-        </View>
-        
         {/* Chart area */}
         <View style={styles.chartArea}>
+          {/* Y-axis labels */}
+          <View style={styles.yAxisLabels}>
+            {[10, 8, 6, 4, 2].map(value => (
+              <Text key={value} style={styles.yAxisLabel}>{value}</Text>
+            ))}
+          </View>
+          
           {/* Grid lines */}
           {[10, 8, 6, 4, 2].map(value => (
             <View 
               key={value} 
               style={[
                 styles.gridLine, 
-                { top: `${((10 - value) / 10) * 100}%` }
+                { top: ((10 - value) / 10) * chartHeight }
               ]} 
             />
           ))}
           
-          {/* Data visualization */}
-          {chartData.map((point, index) => {
-            if (!point.mood && !point.energy && !point.calm && !point.relaxed) return null;
-            
-            const x = (index / Math.max(chartData.length - 1, 1)) * 100;
-            
-            const metrics = [
-              { key: 'mood', value: point.mood, color: '#3B82F6', label: 'Mood' },
-              { key: 'energy', value: point.energy, color: '#10B981', label: 'Energy' },
-              { key: 'calm', value: point.calm, color: '#F59E0B', label: 'Calm' },
-              { key: 'relaxed', value: point.relaxed, color: '#EF4444', label: 'Relaxed' },
-            ];
+          {/* Chart content */}
+          <View style={styles.chartContent}>
+            {/* Data points and lines */}
+            {chartData.map((point, index) => {
+              const x = (index / Math.max(chartData.length - 1, 1)) * (chartWidth - 40);
+              
+              const metrics = [
+                { key: 'mood', value: point.mood, color: '#3B82F6' },
+                { key: 'energy', value: point.energy, color: '#10B981' },
+                { key: 'calm', value: point.calm, color: '#F59E0B' },
+                { key: 'relaxed', value: point.relaxed, color: '#EF4444' },
+              ];
 
-            return metrics.map(metric => {
-              if (metric.value === null || metric.value === undefined) return null;
-              
-              const y = ((10 - metric.value) / 10) * 100;
-              
-              return (
-                <View key={`${index}-${metric.key}`}>
-                  {/* Data point */}
-                  <View 
-                    style={[
-                      styles.dataPoint,
-                      { 
-                        left: `${x}%`,
-                        top: `${y}%`,
-                        backgroundColor: metric.color,
-                      }
-                    ]} 
-                  />
-                  
-                  {/* Connect to next point */}
-                  {index < chartData.length - 1 && (() => {
-                    const nextPoint = chartData[index + 1];
-                    const nextValue = nextPoint[metric.key as keyof typeof nextPoint];
+              return metrics.map((metric, metricIndex) => {
+                if (metric.value === null || metric.value === undefined) return null;
+                
+                const y = ((10 - metric.value) / 10) * chartHeight;
+                
+                return (
+                  <View key={`${index}-${metric.key}`} style={styles.dataPointContainer}>
+                    {/* Data point */}
+                    <View 
+                      style={[
+                        styles.dataPoint,
+                        { 
+                          left: x + 20,
+                          top: y,
+                          backgroundColor: metric.color,
+                        }
+                      ]} 
+                    />
                     
-                    if (nextValue === null || nextValue === undefined) return null;
-                    
-                    const x2 = ((index + 1) / Math.max(chartData.length - 1, 1)) * 100;
-                    const y2 = ((10 - nextValue) / 10) * 100;
-                    
-                    const deltaX = x2 - x;
-                    const deltaY = y2 - y;
-                    const length = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-                    const angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
-                    
-                    return (
-                      <View
-                        key={`line-${index}-${metric.key}`}
-                        style={[
-                          styles.chartLine,
-                          {
-                            left: `${x}%`,
-                            top: `${y}%`,
-                            width: `${length}%`,
-                            backgroundColor: metric.color,
-                            transform: [{ rotate: `${angle}deg` }],
-                          }
-                        ]}
-                      />
-                    );
-                  })()}
-                </View>
-              );
-            }).filter(Boolean);
-          })}
+                    {/* Connect to next point */}
+                    {index < chartData.length - 1 && (() => {
+                      const nextPoint = chartData[index + 1];
+                      const nextValue = nextPoint[metric.key as keyof typeof nextPoint];
+                      
+                      if (nextValue === null || nextValue === undefined) return null;
+                      
+                      const x2 = ((index + 1) / Math.max(chartData.length - 1, 1)) * (chartWidth - 40);
+                      const y2 = ((10 - nextValue) / 10) * chartHeight;
+                      
+                      const deltaX = x2 - x;
+                      const deltaY = y2 - y;
+                      const length = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                      const angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+                      
+                      return (
+                        <View
+                          key={`line-${index}-${metric.key}`}
+                          style={[
+                            styles.chartLine,
+                            {
+                              left: x + 20,
+                              top: y,
+                              width: length,
+                              backgroundColor: metric.color,
+                              transform: [{ rotate: `${angle}deg` }],
+                            }
+                          ]}
+                        />
+                      );
+                    })()}
+                  </View>
+                );
+              }).filter(Boolean);
+            })}
+          </View>
         </View>
         
         {/* X-axis labels */}
         <View style={styles.xAxisContainer}>
           {chartData.map((point, index) => {
-            // Show every other label to avoid crowding
-            if (index % Math.ceil(chartData.length / 4) !== 0) return null;
+            // Show labels for first, middle, and last points
+            if (index !== 0 && index !== Math.floor(chartData.length / 2) && index !== chartData.length - 1) return null;
             
             return (
               <Text key={index} style={styles.xAxisLabel}>
@@ -298,13 +299,6 @@ export default function MoodTrackingScreen() {
             ]}
             onPressIn={(e) => {
               // Simple touch-based slider
-          <TouchableOpacity
-            style={styles.journalButton}
-            onPress={() => router.push('/mood/journal')}
-          >
-            <BookOpen size={16} color="#8B5CF6" />
-            <Text style={styles.journalButtonText}>Journal</Text>
-          </TouchableOpacity>
               const { locationX } = e.nativeEvent;
               const newValue = Math.round((locationX / 250) * 10);
               onValueChange(Math.max(1, Math.min(10, newValue)));
@@ -724,6 +718,15 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingHorizontal: 8,
   },
+  yAxisLabels: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    height: 140,
+    width: 20,
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
   yAxisLabel: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
@@ -731,16 +734,26 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   chartArea: {
-    height: chartHeight,
+    height: 160,
     position: 'relative',
     backgroundColor: '#FFFFFF',
     borderRadius: 8,
     marginBottom: 12,
+    paddingLeft: 20,
+  },
+  chartContent: {
+    position: 'relative',
+    height: 140,
+    width: 260,
+    marginLeft: 20,
+  },
+  dataPointContainer: {
+    position: 'absolute',
   },
   gridLine: {
     position: 'absolute',
-    left: 0,
-    right: 0,
+    left: 20,
+    right: 20,
     height: 1,
     backgroundColor: '#E5E7EB',
   },
