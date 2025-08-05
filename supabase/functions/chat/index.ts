@@ -30,9 +30,10 @@ Deno.serve(async (req) => {
     }
 
     // Get OpenAI API key from environment
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('EXPO_PUBLIC_OPENAI_API_KEY')
     if (!openaiApiKey) {
       console.error('OPENAI_API_KEY not found in environment')
+      console.error('Available env vars:', Object.keys(Deno.env.toObject()))
       return new Response(
         JSON.stringify({ error: 'OpenAI API key not configured' }),
         { 
@@ -42,8 +43,17 @@ Deno.serve(async (req) => {
       )
     }
 
+    console.log('OpenAI API key found, length:', openaiApiKey.length)
+
     // Load knowledge base
-    const knowledgeBase = await loadKnowledgeBase()
+    let knowledgeBase: Record<string, string> = {}
+    try {
+      knowledgeBase = await loadKnowledgeBase()
+      console.log('Knowledge base loaded with', Object.keys(knowledgeBase).length, 'entries')
+    } catch (error) {
+      console.error('Failed to load knowledge base:', error)
+      // Continue with empty knowledge base
+    }
 
     // Initialize chatbot logic
     const chatbot = new EmotionalChatbot(openaiApiKey, knowledgeBase)
@@ -85,9 +95,8 @@ Deno.serve(async (req) => {
 // Load knowledge base from file
 async function loadKnowledgeBase(): Promise<Record<string, string>> {
   try {
-    const kbPath = './knowledge_base.json'
-    const kbText = await Deno.readTextFile(kbPath)
-    const kbArray = JSON.parse(kbText)
+    // Use the embedded knowledge base instead of reading from file
+    const kbArray = KNOWLEDGE_BASE
     
     // Convert array to dictionary format expected by chatbot
     const kbDict: Record<string, string> = {}
@@ -102,7 +111,7 @@ async function loadKnowledgeBase(): Promise<Record<string, string>> {
     return kbDict
   } catch (error) {
     console.error('Failed to load knowledge base:', error)
-    return {}
+    throw error
   }
 }
 
@@ -245,26 +254,35 @@ class EmotionalChatbot {
     maxTokens: number,
     temperature: number
   ): Promise<string> {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: this.model,
-        messages,
-        max_tokens: maxTokens,
-        temperature,
-      }),
-    })
+    try {
+      console.log('Making OpenAI API call with model:', this.model)
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages,
+          max_tokens: maxTokens,
+          temperature,
+        }),
+      })
 
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`)
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('OpenAI API error:', response.status, response.statusText, errorText)
+        throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log('OpenAI API response received successfully')
+      return data.choices[0]?.message?.content?.trim() || "I'm having trouble responding right now."
+    } catch (error) {
+      console.error('OpenAI API call failed:', error)
+      throw error
     }
-
-    const data = await response.json()
-    return data.choices[0]?.message?.content?.trim() || "I'm having trouble responding right now."
   }
 
   private addToHistory(userMessage: string, botResponse: string) {
