@@ -29,11 +29,17 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Get OpenAI API key from environment
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('EXPO_PUBLIC_OPENAI_API_KEY')
+    // Get OpenAI API key from environment - check multiple possible names
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY') || 
+                         Deno.env.get('EXPO_PUBLIC_OPENAI_API_KEY') ||
+                         Deno.env.get('SUPABASE_OPENAI_API_KEY')
+    
     if (!openaiApiKey) {
+      const availableKeys = Object.keys(Deno.env.toObject()).filter(key => 
+        key.toLowerCase().includes('openai') || key.toLowerCase().includes('api')
+      )
       console.error('OPENAI_API_KEY not found in environment')
-      console.error('Available env vars:', Object.keys(Deno.env.toObject()))
+      console.error('Available API-related env vars:', availableKeys)
       return new Response(
         JSON.stringify({ error: 'OpenAI API key not configured' }),
         { 
@@ -43,7 +49,8 @@ Deno.serve(async (req) => {
       )
     }
 
-    console.log('OpenAI API key found, length:', openaiApiKey.length)
+    console.log('OpenAI API key found, length:', openaiApiKey?.length || 0)
+    console.log('API key starts with:', openaiApiKey?.substring(0, 10) + '...')
 
     // Load knowledge base
     let knowledgeBase: Record<string, string> = {}
@@ -62,8 +69,19 @@ Deno.serve(async (req) => {
     chatbot.setConversationHistory(conversationHistory)
 
     // Process message and get response
-    const isEmotional = await chatbot.detectEmotion(message)
-    const response = await chatbot.generateResponse(message, isEmotional)
+    let isEmotional = false
+    let response = "I'm having trouble connecting right now. Please try again."
+    
+    try {
+      isEmotional = await chatbot.detectEmotion(message)
+      console.log('Emotion detection result:', isEmotional)
+      
+      response = await chatbot.generateResponse(message, isEmotional)
+      console.log('Response generated successfully')
+    } catch (chatbotError) {
+      console.error('Chatbot processing error:', chatbotError)
+      response = "I'm experiencing some technical difficulties. Please try again in a moment."
+    }
 
     const result: ChatResponse = {
       response,
@@ -79,10 +97,12 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error('Chat function error:', error)
+    console.error('Error stack:', error.stack)
     return new Response(
       JSON.stringify({ 
         error: 'Internal server error',
-        details: error.message 
+        details: error.message,
+        timestamp: new Date().toISOString()
       }),
       { 
         status: 500, 
