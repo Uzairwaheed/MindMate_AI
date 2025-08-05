@@ -46,6 +46,14 @@ export default function SleepInsightsScreen() {
   const fadeAnim = useSharedValue(0);
   const slideAnim = useSharedValue(50);
 
+  // Calculate duration score (0-40 points) - moved before usage
+  const calculateDurationScore = (hours: number): number => {
+    if (hours >= 7 && hours <= 9) return 40; // Optimal range
+    if (hours >= 6 && hours <= 10) return 35; // Good range
+    if (hours >= 5 && hours <= 11) return 25; // Acceptable range
+    return Math.max(0, 40 - Math.abs(hours - 8) * 5); // Penalty for deviation
+  };
+
   useEffect(() => {
     loadSleepInsights();
     
@@ -124,14 +132,6 @@ export default function SleepInsightsScreen() {
       };
     });
   }, [sleepEntries]);
-
-  // Calculate duration score (0-40 points)
-  const calculateDurationScore = (hours: number): number => {
-    if (hours >= 7 && hours <= 9) return 40; // Optimal range
-    if (hours >= 6 && hours <= 10) return 35; // Good range
-    if (hours >= 5 && hours <= 11) return 25; // Acceptable range
-    return Math.max(0, 40 - Math.abs(hours - 8) * 5); // Penalty for deviation
-  };
 
   // Filter real data by time period
   const filteredData = useMemo(() => {
