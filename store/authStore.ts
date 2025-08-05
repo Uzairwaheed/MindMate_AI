@@ -20,8 +20,8 @@ interface AuthStore {
   loading: boolean;
   greeting: string;
   login: (email: string, password: string) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
-  loginWithFacebook: () => Promise<void>;
+  // loginWithGoogle: () => Promise<void>; // Commented out
+  // loginWithFacebook: () => Promise<void>; // Commented out
   signup: (userData: any) => Promise<void>;
   logout: () => void;
   updateProfile: (updates: Partial<User>) => Promise<void>;
@@ -62,6 +62,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
   },
 
+  /* Social Login Methods - Commented Out
   loginWithGoogle: async () => {
     try {
       set({ loading: true });
@@ -83,6 +84,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       throw error;
     }
   },
+  */
   
   signup: async (userData: any) => {
     try {

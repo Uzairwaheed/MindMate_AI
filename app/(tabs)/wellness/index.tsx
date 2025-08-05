@@ -20,6 +20,7 @@ export default function WellnessScreen() {
       color: '#3B82F6',
       route: '/wellness/breathing',
     },
+    /* Goals & Habits - Commented Out
     {
       title: 'Goals & Habits',
       description: 'Track your wellness goals',
@@ -27,6 +28,7 @@ export default function WellnessScreen() {
       color: '#10B981',
       route: '/wellness/goals',
     },
+    */
     {
       title: 'Therapy Resources',
       description: 'Find professional support',

@@ -27,9 +27,11 @@ export default function SignupScreen() {
     router.push('/auth/signup-step2');
   };
 
+  /* Social Signup Handler - Commented Out
   const handleSocialSignup = (provider: string) => {
     Alert.alert('Coming Soon', `${provider} signup will be available soon!`);
   };
+  */
 
   return (
     <LinearGradient
@@ -94,6 +96,7 @@ export default function SignupScreen() {
             <Text style={styles.nextButtonText}>Next</Text>
           </TouchableOpacity>
 
+          {/* Social Signup - Commented Out for Future Implementation
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>or</Text>
@@ -113,6 +116,7 @@ export default function SignupScreen() {
           >
             <Text style={styles.socialButtonText}>Sign up with Facebook</Text>
           </TouchableOpacity>
+          */}
         </View>
 
         <View style={styles.footer}>

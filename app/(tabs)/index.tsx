@@ -76,6 +76,7 @@ export default function DashboardScreen() {
       color: '#8B5CF6',
       route: '/wellness/quiz',
     },
+    /* Daily Journal - Commented Out
     {
       title: 'Daily Journal',
       description: 'Reflect on your thoughts',
@@ -83,6 +84,7 @@ export default function DashboardScreen() {
       color: '#F59E0B',
       route: '/mood/journal',
     },
+    */
     {
       title: 'Sleep Tracker',
       description: 'Monitor your sleep patterns',
