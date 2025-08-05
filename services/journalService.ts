@@ -28,14 +28,14 @@ class JournalService {
       if (!user) throw new Error('No authenticated user');
 
       // Analyze sentiment of the content
-      // const sentimentScore = await this.analyzeSentiment(entryData.content); // Commented out
+      const sentimentScore = await this.analyzeSentiment(entryData.content);
 
       const insertData: JournalEntryInsert = {
         user_id: user.id,
         title: entryData.title || '',
         content: entryData.content,
         mood_rating: entryData.moodRating ? Math.ceil(entryData.moodRating / 2) : null,
-        sentiment_score: 0, // Default neutral sentiment
+        sentiment_score: sentimentScore,
         entry_date: entryData.entryDate || new Date().toISOString().split('T')[0],
       };
 
@@ -107,9 +107,9 @@ class JournalService {
       if (!user) throw new Error('No authenticated user');
 
       // Re-analyze sentiment if content changed
-      // if (updates.content) {
-      //   updates.sentiment_score = await this.analyzeSentiment(updates.content);
-      // } // Commented out sentiment analysis
+      if (updates.content) {
+        updates.sentiment_score = await this.analyzeSentiment(updates.content);
+      }
 
       const { data, error } = await supabase
         .from('journal_entries')
@@ -204,7 +204,6 @@ class JournalService {
   }
 
   // Simple sentiment analysis (placeholder for AI service)
-  /* Sentiment Analysis - Commented Out for Future Implementation
   private async analyzeSentiment(text: string): Promise<number> {
     try {
       // This is a simple placeholder implementation
@@ -227,7 +226,6 @@ class JournalService {
       return 0; // Neutral sentiment on error
     }
   }
-  */
 }
 
 export const journalService = new JournalService();

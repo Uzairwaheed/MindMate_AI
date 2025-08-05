@@ -6,7 +6,6 @@ import { BookOpen, Camera, TrendingUp, Calendar } from 'lucide-react-native';
 
 export default function MoodScreen() {
   const moodFeatures = [
-    /* Daily Journal - Commented Out
     {
       title: 'Daily Journal',
       description: 'Reflect on your thoughts and feelings',
@@ -14,7 +13,6 @@ export default function MoodScreen() {
       color: '#F59E0B',
       route: '/mood/journal',
     },
-    */
     {
       title: 'Sentiment Analysis',
       description: 'Analyze your mood through photos',
@@ -42,7 +40,6 @@ export default function MoodScreen() {
           <Text style={styles.subtitle}>Track and understand your emotions</Text>
         </View>
 
-        {/* Quick Mood Check - Commented Out
         <View style={styles.quickMoodCheck}>
           <Text style={styles.quickTitle}>Quick Mood Check</Text>
           <Text style={styles.quickSubtitle}>How are you feeling right now?</Text>
@@ -54,7 +51,6 @@ export default function MoodScreen() {
             ))}
           </View>
         </View>
-        */}
 
         <View style={styles.featuresContainer}>
           {moodFeatures.map((feature, index) => (

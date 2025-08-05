@@ -241,7 +241,6 @@ class MoodService {
   }
 
   // Enhanced method for sentiment analysis with image data
-  /* Sentiment Analysis - Commented Out for Future Implementation
   async analyzeImageSentiment(imageBase64: string): Promise<{
     emotion: string;
     confidence: number;
@@ -307,7 +306,6 @@ class MoodService {
       throw error;
     }
   }
-  */
 
   async getMoodAnalytics(days: number = 7): Promise<{
     averageMood: number;

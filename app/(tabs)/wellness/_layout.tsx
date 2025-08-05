@@ -6,7 +6,7 @@ export default function WellnessLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="quiz" />
       <Stack.Screen name="breathing" />
-      {/* <Stack.Screen name="goals" /> */}
+      <Stack.Screen name="goals" />
       <Stack.Screen name="therapy" />
     </Stack>
   );

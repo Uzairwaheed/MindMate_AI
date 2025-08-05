@@ -10,7 +10,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { login } = useAuthStore(); // Removed social login methods
+  const { login, loginWithGoogle, loginWithFacebook } = useAuthStore();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -29,7 +29,6 @@ export default function LoginScreen() {
     }
   };
 
-  /* Social Login Handler - Commented Out
   const handleSocialLogin = async (provider: 'google' | 'facebook') => {
     try {
       setLoading(true);
@@ -44,7 +43,6 @@ export default function LoginScreen() {
       setLoading(false);
     }
   };
-  */
 
   return (
     <LinearGradient
@@ -107,7 +105,6 @@ export default function LoginScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* Social Login - Commented Out for Future Implementation
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>or</Text>
@@ -129,7 +126,6 @@ export default function LoginScreen() {
           >
             <Text style={styles.socialButtonText}>Continue with Facebook</Text>
           </TouchableOpacity>
-          */}
         </View>
 
         <View style={styles.footer}>

@@ -74,7 +74,6 @@ class AuthService {
   }
 
   // Google OAuth
-  /* Social Login Methods - Commented Out for Future Implementation
   async signInWithGoogle() {
     try {
       const { data, error } = await supabase.auth.signInWithOAuth({
@@ -109,7 +108,6 @@ class AuthService {
       throw error;
     }
   }
-  */
 
   // Get current user profile
   async getCurrentUserProfile(): Promise<UserProfile | null> {
