@@ -280,17 +280,29 @@ class SleepService {
     sleepScore: number;
     trend: 'up' | 'down' | 'stable';
     qualityBreakdown: {
-      deep: number;
-      light: number;
-      awake: number;
+      good: number;
+      okay: number;
+      poor: number;
     };
+    bestSleepDay: string | null;
+    consistencyScore: number;
+    averageBedtime: string;
+    commonWakeMood: string;
     recentEntries: SleepEntry[];
   }> {
     try {
-      const [analytics, chartData, recentEntries] = await Promise.all([
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(endDate.getDate() - days);
+
+      const [analytics, chartData, recentEntries, allEntries] = await Promise.all([
         this.getSleepAnalytics(days),
         this.getChartData(days),
-        this.getUserSleepEntries(5)
+        this.getUserSleepEntries(5),
+        this.getSleepEntriesByDateRange(
+          startDate.toISOString().split('T')[0],
+          endDate.toISOString().split('T')[0]
+        )
       ]);
 
       // Calculate comprehensive sleep score (0-100)
@@ -318,8 +330,20 @@ class SleepService {
         else if (recentAvg < earlierAvg - 0.5) trend = 'down';
       }
 
-      // Generate quality breakdown based on sleep quality scores
-      const qualityBreakdown = this.generateQualityBreakdown(analytics.qualityAverage);
+      // Calculate real quality breakdown from user entries
+      const qualityBreakdown = this.calculateRealQualityBreakdown(allEntries);
+
+      // Calculate best sleep day from real data
+      const bestSleepDay = this.calculateBestSleepDay(allEntries);
+
+      // Calculate consistency score from real bedtime variance
+      const realConsistencyScore = this.calculateConsistencyScore(allEntries);
+
+      // Calculate average bedtime from real data
+      const averageBedtime = this.calculateAverageBedtime(allEntries);
+
+      // Calculate most common wake mood from real data
+      const commonWakeMood = this.calculateCommonWakeMood(allEntries);
 
       return {
         chartData,
@@ -327,6 +351,10 @@ class SleepService {
         sleepScore,
         trend,
         qualityBreakdown,
+        bestSleepDay,
+        consistencyScore: realConsistencyScore,
+        averageBedtime,
+        commonWakeMood,
         recentEntries,
       };
     } catch (error) {
@@ -335,30 +363,136 @@ class SleepService {
     }
   }
 
-  // Generate sleep stage breakdown from quality data
-  private generateQualityBreakdown(avgQuality: number): {
-    deep: number;
-    light: number;
-    awake: number;
+  // Calculate real quality breakdown from user entries
+  private calculateRealQualityBreakdown(entries: SleepEntry[]): {
+    good: number;
+    okay: number;
+    poor: number;
   } {
-    // Base percentages for average sleep
-    const baseDeep = 22;
-    const baseLight = 65;
-    const baseAwake = 13;
+    if (entries.length === 0) {
+      return { good: 0, okay: 0, poor: 0 };
+    }
 
-    // Adjust based on quality score (1-10 scale)
-    const qualityFactor = (avgQuality - 5.5) / 4.5; // Normalize to -1 to 1
+    const counts = entries.reduce((acc, entry) => {
+      // Categorize based on sleep quality + duration
+      if (entry.sleep_quality >= 7 && entry.sleep_duration >= 7 && entry.sleep_duration <= 9) {
+        acc.good++;
+      } else if (entry.sleep_quality >= 5 && entry.sleep_duration >= 6 && entry.sleep_duration <= 10) {
+        acc.okay++;
+      } else {
+        acc.poor++;
+      }
+      return acc;
+    }, { good: 0, okay: 0, poor: 0 });
+
+    return counts;
+  }
+
+  // Calculate best sleep day from real user data
+  private calculateBestSleepDay(entries: SleepEntry[]): string | null {
+    if (entries.length === 0) return null;
+
+    const bestEntry = entries.reduce((best, current) => {
+      // Calculate weighted score: duration (40%) + quality (35%) + mood (25%)
+      const currentScore = this.calculateSleepScore(current);
+      const bestScore = this.calculateSleepScore(best);
+      
+      return currentScore > bestScore ? current : best;
+    });
+
+    return new Date(bestEntry.entry_date).toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  }
+
+  // Calculate sleep score for individual entry
+  private calculateSleepScore(entry: SleepEntry): number {
+    // Duration score (0-40 points)
+    const durationScore = entry.sleep_duration >= 7 && entry.sleep_duration <= 9 
+      ? 40 : Math.max(0, 40 - Math.abs(entry.sleep_duration - 8) * 5);
     
-    // Higher quality = more deep sleep, less awake time
-    const deep = Math.max(15, Math.min(35, baseDeep + (qualityFactor * 8)));
-    const awake = Math.max(5, Math.min(25, baseAwake - (qualityFactor * 6)));
-    const light = 100 - deep - awake;
+    // Quality score (0-35 points)
+    const qualityScore = (entry.sleep_quality / 10) * 35;
+    
+    // Mood score (0-25 points)
+    const moodScore = this.getMoodScore(entry.mood_after_sleep);
+    
+    return Math.round(durationScore + qualityScore + moodScore);
+  }
 
-    return {
-      deep: Math.round(deep),
-      light: Math.round(light),
-      awake: Math.round(awake),
-    };
+  // Convert mood to score
+  private getMoodScore(mood: string): number {
+    const moodLower = mood.toLowerCase();
+    if (moodLower.includes('great') || moodLower.includes('amazing')) return 25;
+    if (moodLower.includes('good')) return 20;
+    if (moodLower.includes('fair')) return 15;
+    if (moodLower.includes('poor')) return 10;
+    if (moodLower.includes('terrible')) return 5;
+    return 15; // Default
+  }
+
+  // Calculate consistency score from real bedtime variance
+  private calculateConsistencyScore(entries: SleepEntry[]): number {
+    if (entries.length < 2) return 0;
+    
+    const bedtimes = entries.map(entry => {
+      const [hours, minutes] = entry.bedtime.split(':').map(Number);
+      return hours * 60 + minutes;
+    });
+    
+    const avgBedtime = bedtimes.reduce((sum, time) => sum + time, 0) / bedtimes.length;
+    const variance = bedtimes.reduce((sum, time) => sum + Math.pow(time - avgBedtime, 2), 0) / bedtimes.length;
+    const standardDeviation = Math.sqrt(variance);
+    
+    // Convert to consistency score (lower deviation = higher consistency)
+    const maxDeviation = 120; // 2 hours in minutes
+    const consistency = Math.max(0, 100 - (standardDeviation / maxDeviation) * 100);
+    
+    return Math.round(consistency);
+  }
+
+  // Calculate average bedtime from real data
+  private calculateAverageBedtime(entries: SleepEntry[]): string {
+    if (entries.length === 0) return 'N/A';
+    
+    const times = entries.map(entry => {
+      const [hours, minutes] = entry.bedtime.split(':').map(Number);
+      return hours * 60 + minutes;
+    });
+    
+    const avgMinutes = times.reduce((sum, time) => sum + time, 0) / times.length;
+    const hours = Math.floor(avgMinutes / 60);
+    const mins = Math.round(avgMinutes % 60);
+    
+    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+  }
+
+  // Calculate most common wake mood from real data
+  private calculateCommonWakeMood(entries: SleepEntry[]): string {
+    if (entries.length === 0) return 'N/A';
+    
+    const moodCounts = entries.reduce((acc, entry) => {
+      const mood = this.normalizeMood(entry.mood_after_sleep);
+      acc[mood] = (acc[mood] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    const mostCommon = Object.entries(moodCounts).reduce((a, b) => 
+      moodCounts[a[0]] > moodCounts[b[0]] ? a : b
+    )[0];
+    
+    const emojis = { fresh: '😄', energized: '⚡', tired: '😴', groggy: '😵‍💫' };
+    return `${emojis[mostCommon as keyof typeof emojis]} ${mostCommon.charAt(0).toUpperCase() + mostCommon.slice(1)}`;
+  }
+
+  // Normalize mood from database to component format
+  private normalizeMood(mood: string): 'fresh' | 'energized' | 'tired' | 'groggy' {
+    const moodLower = mood.toLowerCase();
+    if (moodLower.includes('great') || moodLower.includes('amazing')) return 'energized';
+    if (moodLower.includes('good')) return 'fresh';
+    if (moodLower.includes('poor') || moodLower.includes('terrible')) return 'groggy';
+    return 'tired'; // Default
   }
 
   // Get chart data for visualization
