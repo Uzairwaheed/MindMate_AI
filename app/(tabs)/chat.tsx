@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Send, Bot, User } from 'lucide-react-native';
+import { useAuthStore } from '@/store/authStore';
 
 interface Message {
   id: string;
@@ -11,20 +12,23 @@ interface Message {
 }
 
 export default function ChatScreen() {
+  const { user } = useAuthStore();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: "Hello! I'm your MindMate AI assistant. I'm here to support your mental wellness journey. How are you feeling today?",
+      text: `Hello${user?.fullName ? `, ${user.fullName.split(' ')[0]}` : ''}! I'm your MindMate AI assistant. I'm here to support your mental wellness journey. How are you feeling today?`,
       sender: 'ai',
       timestamp: new Date(),
     },
   ]);
   const [inputText, setInputText] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
   const sendMessage = async () => {
     if (!inputText.trim()) return;
 
+    setIsLoading(true);
     const userMessage: Message = {
       id: Date.now().toString(),
       text: inputText.trim(),
@@ -35,27 +39,49 @@ export default function ChatScreen() {
     setMessages(prev => [...prev, userMessage]);
     setInputText('');
 
-    // Simulate AI response
-    setTimeout(() => {
+    try {
+      // Call the custom chatbot backend
+      const response = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          message: userMessage.text,
+          conversationHistory: messages.slice(-6).map(msg => ({
+            role: msg.sender === 'user' ? 'user' : 'assistant',
+            content: msg.text
+          }))
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: generateAIResponse(inputText),
+        text: data.response || "I'm having trouble responding right now. Please try again.",
         sender: 'ai',
         timestamp: new Date(),
       };
+      
       setMessages(prev => [...prev, aiResponse]);
-    }, 1000);
-  };
-
-  const generateAIResponse = (userInput: string) => {
-    const responses = [
-      "I understand how you're feeling. Remember that it's completely normal to have ups and downs. Can you tell me more about what's been on your mind?",
-      "Thank you for sharing that with me. It takes courage to express your feelings. What would help you feel better right now?",
-      "I hear you. Sometimes taking deep breaths can help in the moment. Have you tried any relaxation techniques that work for you?",
-      "That sounds challenging. Remember that you're not alone in this journey. What are some things that usually bring you comfort?",
-      "It's important to acknowledge your feelings. Have you considered talking to a mental health professional about this?",
-    ];
-    return responses[Math.floor(Math.random() * responses.length)];
+    } catch (error) {
+      console.error('Chat error:', error);
+      const errorResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        text: "I'm having trouble connecting right now. Please check your internet connection and try again.",
+        sender: 'ai',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorResponse]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const MessageBubble = ({ message }: { message: Message }) => (
@@ -130,9 +156,13 @@ export default function ChatScreen() {
           <TouchableOpacity
             style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
             onPress={sendMessage}
-            disabled={!inputText.trim()}
+            disabled={!inputText.trim() || isLoading}
           >
-            <Send size={20} color="#FFFFFF" />
+            {isLoading ? (
+              <Text style={styles.loadingText}>...</Text>
+            ) : (
+              <Send size={20} color="#FFFFFF" />
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -254,5 +284,10 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.5,
+  },
+  loadingText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
   },
 });
