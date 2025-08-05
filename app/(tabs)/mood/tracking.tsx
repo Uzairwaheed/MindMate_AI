@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { ChevronLeft, Plus, TrendingUp, Calendar, CreditCard as Edit, Trash2, X, Check, BookOpen } from 'lucide-react-native';
+import { ChevronLeft, Plus, Minus, Calendar, CreditCard as Edit, Trash2, X, Check, BookOpen } from 'lucide-react-native';
 import { moodService, ParsedMoodEntry, UpdateMoodEntryData } from '@/services/moodService';
 
 export default function MoodTrackingScreen() {
@@ -102,128 +102,148 @@ export default function MoodTrackingScreen() {
   };
 
   const renderChart = () => {
-    const maxValue = 10;
-    const chartHeight = 120;
-    const chartWidth = 280;
+    if (chartData.length === 0) {
+      return (
+        <View style={styles.noDataContainer}>
+          <Text style={styles.noDataText}>No mood data available</Text>
+          <Text style={styles.noDataSubtext}>Start logging your mood to see trends</Text>
+        </View>
+      );
+    }
+
+    const chartHeight = 140;
+    const chartWidth = 300;
+    const padding = 40;
     
     return (
       <View style={styles.chartContainer}>
-        <View style={styles.chartArea}>
-          {/* Y-axis labels */}
-          <View style={styles.yAxis}>
-            {[10, 7, 4, 1].map(value => (
-              <Text key={value} style={styles.yAxisLabel}>{value}</Text>
-            ))}
-          </View>
-          
-          {/* Chart content */}
-          <View style={styles.chartContent}>
-            {/* Grid lines */}
-            <View style={styles.chartGrid}>
-              {[10, 7, 4, 1].map(value => (
-                <View key={value} style={styles.gridLine} />
-              ))}
-            </View>
-            
-            {/* Data points and lines */}
-            <View style={styles.dataContainer}>
-              {chartData.map((point, index) => {
-                const x = (index / (chartData.length - 1)) * 100;
-                
-                // Render data points for each metric
-                const metrics = [
-                  { key: 'mood', color: '#3B82F6', value: point.mood },
-                  { key: 'energy', color: '#10B981', value: point.energy },
-                  { key: 'calm', color: '#F59E0B', value: point.calm },
-                  { key: 'relaxed', color: '#EF4444', value: point.relaxed },
-                ];
-
-                return metrics.map(metric => {
-                  if (metric.value === null) return null;
-                  
-                  const y = ((maxValue - metric.value) / maxValue) * 100;
-                  
-                  return (
-                    <View key={`${index}-${metric.key}`}>
-                      <View 
-                        style={[
-                          styles.dataPoint,
-                          { 
-                            left: `${x}%`,
-                            top: `${y}%`,
-                            backgroundColor: metric.color
-                          }
-                        ]} 
-                      />
-                      {/* Draw line to next point */}
-                      {index < chartData.length - 1 && (
-                        (() => {
-                          const nextPoint = chartData[index + 1];
-                          const nextMetric = nextPoint[metric.key === 'mood' ? 'mood' : 
-                                                     metric.key === 'energy' ? 'energy' :
-                                                     metric.key === 'calm' ? 'calm' : 'relaxed'];
-                          
-                          if (nextMetric === null) return null;
-                          
-                          const x2 = ((index + 1) / (chartData.length - 1)) * 100;
-                          const y2 = ((maxValue - nextMetric) / maxValue) * 100;
-                          
-                          const lineLength = Math.sqrt(
-                            Math.pow((x2 - x) * chartWidth / 100, 2) + 
-                            Math.pow((y2 - y) * chartHeight / 100, 2)
-                          );
-                          const angle = Math.atan2((y2 - y) * chartHeight / 100, (x2 - x) * chartWidth / 100) * 180 / Math.PI;
-                          
-                          return (
-                            <View
-                              style={[
-                                styles.chartLine,
-                                {
-                                  left: `${x}%`,
-                                  top: `${y}%`,
-                                  width: lineLength,
-                                  backgroundColor: metric.color,
-                                  transform: [{ rotate: `${angle}deg` }],
-                                }
-                              ]}
-                            />
-                          );
-                        })()
-                      )}
-                    </View>
-                  );
-                }).filter(Boolean);
-              })}
-            </View>
-          </View>
-        </View>
-        
-        {/* X-axis labels */}
-        <View style={styles.xAxis}>
-          {chartData.map((point, index) => (
-            <Text key={index} style={styles.xAxisLabel}>
-              {point.date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}
-            </Text>
+        {/* Y-axis labels */}
+        <View style={styles.yAxisContainer}>
+          {[10, 8, 6, 4, 2].map(value => (
+            <Text key={value} style={styles.yAxisLabel}>{value}</Text>
           ))}
         </View>
         
+        {/* Chart area */}
+        <View style={styles.chartArea}>
+          {/* Grid lines */}
+          {[10, 8, 6, 4, 2].map(value => (
+            <View 
+              key={value} 
+              style={[
+                styles.gridLine, 
+                { top: `${((10 - value) / 10) * 100}%` }
+              ]} 
+            />
+          ))}
+          
+          {/* Data visualization */}
+          {chartData.map((point, index) => {
+            if (!point.mood && !point.energy && !point.calm && !point.relaxed) return null;
+            
+            const x = (index / Math.max(chartData.length - 1, 1)) * 100;
+            
+            const metrics = [
+              { key: 'mood', value: point.mood, color: '#3B82F6', label: 'Mood' },
+              { key: 'energy', value: point.energy, color: '#10B981', label: 'Energy' },
+              { key: 'calm', value: point.calm, color: '#F59E0B', label: 'Calm' },
+              { key: 'relaxed', value: point.relaxed, color: '#EF4444', label: 'Relaxed' },
+            ];
+
+            return metrics.map(metric => {
+              if (metric.value === null || metric.value === undefined) return null;
+              
+              const y = ((10 - metric.value) / 10) * 100;
+              
+              return (
+                <View key={`${index}-${metric.key}`}>
+                  {/* Data point */}
+                  <View 
+                    style={[
+                      styles.dataPoint,
+                      { 
+                        left: `${x}%`,
+                        top: `${y}%`,
+                        backgroundColor: metric.color,
+                      }
+                    ]} 
+                  />
+                  
+                  {/* Connect to next point */}
+                  {index < chartData.length - 1 && (() => {
+                    const nextPoint = chartData[index + 1];
+                    const nextValue = nextPoint[metric.key as keyof typeof nextPoint];
+                    
+                    if (nextValue === null || nextValue === undefined) return null;
+                    
+                    const x2 = ((index + 1) / Math.max(chartData.length - 1, 1)) * 100;
+                    const y2 = ((10 - nextValue) / 10) * 100;
+                    
+                    const deltaX = x2 - x;
+                    const deltaY = y2 - y;
+                    const length = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                    const angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+                    
+                    return (
+                      <View
+                        key={`line-${index}-${metric.key}`}
+                        style={[
+                          styles.chartLine,
+                          {
+                            left: `${x}%`,
+                            top: `${y}%`,
+                            width: `${length}%`,
+                            backgroundColor: metric.color,
+                            transform: [{ rotate: `${angle}deg` }],
+                          }
+                        ]}
+                      />
+                    );
+                  })()}
+                </View>
+              );
+            }).filter(Boolean);
+          })}
+        </View>
+        
+        {/* X-axis labels */}
+        <View style={styles.xAxisContainer}>
+          {chartData.map((point, index) => {
+            // Show every other label to avoid crowding
+            if (index % Math.ceil(chartData.length / 4) !== 0) return null;
+            
+            return (
+              <Text key={index} style={styles.xAxisLabel}>
+                {point.date.toLocaleDateString('en-US', { 
+                  month: 'numeric', 
+                  day: 'numeric' 
+                })}
+              </Text>
+            );
+          })}
+        </View>
+        
         {/* Legend */}
-        <View style={styles.legend}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#3B82F6' }]} />
-            <Text style={styles.legendText}>Mood</Text>
+        <View style={styles.chartLegend}>
+          <View style={styles.legendRow}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: '#3B82F6' }]} />
+              <Text style={styles.legendText}>Mood</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+              <Text style={styles.legendText}>Energy</Text>
+            </View>
           </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
-            <Text style={styles.legendText}>Energy</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
-            <Text style={styles.legendText}>Calm</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
-            <Text style={styles.legendText}>Relaxed</Text>
+          <View style={styles.legendRow}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
+              <Text style={styles.legendText}>Calm</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
+              <Text style={styles.legendText}>Relaxed</Text>
+            </View>
           </View>
         </View>
       </View>
@@ -233,11 +253,11 @@ export default function MoodTrackingScreen() {
   const getTrendIcon = (trend: string) => {
     switch (trend) {
       case 'improving':
-        return '📈';
+        return <Plus size={16} color="#10B981" />;
       case 'declining':
-        return '📉';
+        return <Minus size={16} color="#EF4444" />;
       default:
-        return '➡️';
+        return <Minus size={16} color="#6B7280" style={{ transform: [{ rotate: '90deg' }] }} />;
     }
   };
 
@@ -333,7 +353,9 @@ export default function MoodTrackingScreen() {
           </View>
           
           <View style={styles.statCard}>
-            <Text style={styles.statEmoji}>{getTrendIcon(moodStats.trend)}</Text>
+            <View style={styles.statIconContainer}>
+              {getTrendIcon(moodStats.trend)}
+            </View>
             <Text style={styles.statValue}>
               {loading ? '...' : (moodStats.trend || 'stable').charAt(0).toUpperCase() + (moodStats.trend || 'stable').slice(1)}
             </Text>
@@ -651,6 +673,15 @@ const styles = StyleSheet.create({
     fontSize: 32,
     marginBottom: 8,
   },
+  statIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
   statValue: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
@@ -681,90 +712,111 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   chartContainer: {
-    height: 200,
+    height: 240,
+    backgroundColor: '#FAFAFA',
+    borderRadius: 12,
+    padding: 16,
   },
-  chartArea: {
+  yAxisContainer: {
     flexDirection: 'row',
-    height: 120,
-    marginBottom: 12,
-  },
-  yAxis: {
-    width: 20,
     justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    paddingRight: 8,
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 8,
   },
   yAxisLabel: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    color: '#6B7280',
+    fontWeight: '500',
   },
-  chartContent: {
-    flex: 1,
+  chartArea: {
+    height: chartHeight,
     position: 'relative',
-  },
-  chartGrid: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    marginBottom: 12,
   },
   gridLine: {
-    height: 1,
-    backgroundColor: '#F3F4F6',
-  },
-  dataContainer: {
     position: 'absolute',
-    top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
+    height: 1,
+    backgroundColor: '#E5E7EB',
   },
   dataPoint: {
     position: 'absolute',
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginLeft: -3,
-    marginTop: -3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: -4,
+    marginTop: -4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
   chartLine: {
     position: 'absolute',
-    height: 2,
+    height: 3,
     transformOrigin: 'left center',
+    borderRadius: 1.5,
   },
-  xAxis: {
+  xAxisContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingLeft: 28,
+    paddingHorizontal: 16,
     marginBottom: 16,
   },
   xAxisLabel: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    color: '#6B7280',
+    fontWeight: '500',
   },
-  legend: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+  chartLegend: {
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: '#E5E7EB',
+  },
+  legendRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 8,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     marginRight: 6,
   },
   legendText: {
-    fontSize: 12,
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  noDataContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    backgroundColor: '#FAFAFA',
+    borderRadius: 12,
+  },
+  noDataText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#9CA3AF',
+    marginBottom: 4,
+  },
+  noDataSubtext: {
+    fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
   },
