@@ -57,15 +57,15 @@ export default function MoodScreen() {
           {moodFeatures.map((feature, index) => (
             <TouchableOpacity
               key={index}
-              style={styles.featureCard}
+              style={styles.enhancedFeatureCard}
               onPress={() => router.push(feature.route as any)}
             >
-              <View style={[styles.featureIcon, { backgroundColor: `${feature.color}15` }]}>
-                <feature.icon size={24} color={feature.color} />
+              <View style={[styles.enhancedFeatureIcon, { backgroundColor: `${feature.color}15` }]}>
+                <feature.icon size={32} color={feature.color} />
               </View>
-              <View style={styles.featureContent}>
-                <Text style={styles.featureTitle}>{feature.title}</Text>
-                <Text style={styles.featureDescription}>{feature.description}</Text>
+              <View style={styles.enhancedFeatureContent}>
+                <Text style={styles.enhancedFeatureTitle}>{feature.title}</Text>
+                <Text style={styles.enhancedFeatureDescription}>{feature.description}</Text>
               </View>
             </TouchableOpacity>
           ))}
@@ -149,6 +149,52 @@ const styles = StyleSheet.create({
   featuresContainer: {
     marginBottom: 40,
   },
+  enhancedFeatureCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 28,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.1)',
+  },
+  enhancedFeatureIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  enhancedFeatureContent: {
+    flex: 1,
+  },
+  enhancedFeatureTitle: {
+    fontSize: 22,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1F2937',
+    marginBottom: 8,
+    letterSpacing: 0.5,
+  },
+  enhancedFeatureDescription: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 24,
+    letterSpacing: 0.2,
+  },
+  // Keep original styles for backward compatibility
   featureCard: {
     flexDirection: 'row',
     alignItems: 'center',

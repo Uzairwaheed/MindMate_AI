@@ -278,13 +278,6 @@ export default function MoodTrackingScreen() {
             ]}
             onPressIn={(e) => {
               // Simple touch-based slider
-          <TouchableOpacity
-            style={styles.journalButton}
-            onPress={() => router.push('/mood/journal')}
-          >
-            <BookOpen size={16} color="#8B5CF6" />
-            <Text style={styles.journalButtonText}>Journal</Text>
-          </TouchableOpacity>
               const { locationX } = e.nativeEvent;
               const newValue = Math.round((locationX / 250) * 10);
               onValueChange(Math.max(1, Math.min(10, newValue)));
